@@ -21,7 +21,6 @@ Observation: Vibration increases to approximately 0.37 mm/s, losing the healthy 
 
 <img src="validation/P-0200_timeseries.png" width="180"> <img src="validation/P-0200_pump_curve.png" width="180"> <img src="validation/P-0200_correlation.png" width="180"> <img src="validation/P-0200_profiles.png" width="180"> <img src="validation/P-0200_weekly.png" width="180">
 
-Observation: Normal U-shaped vibration, flow-power correlation approximately 0.98, temperatures within 31-51 degrees C.
 
 ---
 
@@ -37,7 +36,6 @@ Observation: Differential pressure shows random spikes (up to 0.3 bar). Flow-vib
 
 <img src="validation/P-0400_timeseries.png" width="180"> <img src="validation/P-0400_pump_curve.png" width="180"> <img src="validation/P-0400_correlation.png" width="180"> <img src="validation/P-0400_profiles.png" width="180"> <img src="validation/P-0400_weekly.png" width="180">
 
-Observation: All signals exhibit standard pump behaviour. U-shaped vibration, flow-power correlation approximately 0.98.
 
 ---
 
@@ -53,7 +51,6 @@ Observation: Motor temperature drifts up to 65.9 degrees C (compared to approxim
 
 <img src="validation/P-0600_timeseries.png" width="180"> <img src="validation/P-0600_pump_curve.png" width="180"> <img src="validation/P-0600_correlation.png" width="180"> <img src="validation/P-0600_profiles.png" width="180"> <img src="validation/P-0600_weekly.png" width="180">
 
-Observation: Normal patterns -- flow-power correlation approximately 0.98, vibration minimum near BEP.
 
 ---
 
@@ -69,7 +66,6 @@ Observation: Values appear 100 times higher due to kPa/bar confusion. Correlatio
 
 <img src="validation/P-0800_timeseries.png" width="180"> <img src="validation/P-0800_pump_curve.png" width="180"> <img src="validation/P-0800_correlation.png" width="180"> <img src="validation/P-0800_profiles.png" width="180"> <img src="validation/P-0800_weekly.png" width="180">
 
-Observation: Standard behaviour -- U-shaped vibration (minimum at approximately 0.9 times nominal flow), flow-power correlation approximately 0.98.
 
 ---
 
@@ -77,7 +73,6 @@ Observation: Standard behaviour -- U-shaped vibration (minimum at approximately 
 
 <img src="validation/P-0900_timeseries.png" width="180"> <img src="validation/P-0900_pump_curve.png" width="180"> <img src="validation/P-0900_correlation.png" width="180"> <img src="validation/P-0900_profiles.png" width="180"> <img src="validation/P-0900_weekly.png" width="180">
 
-Observation: Healthy pump; correlations match expected values.
 
 ---
 
@@ -85,4 +80,3 @@ Observation: Healthy pump; correlations match expected values.
 
 <img src="validation/P-1000_timeseries.png" width="180"> <img src="validation/P-1000_pump_curve.png" width="180"> <img src="validation/P-1000_correlation.png" width="180"> <img src="validation/P-1000_profiles.png" width="180"> <img src="validation/P-1000_weekly.png" width="180">
 
-Observation: Largest pump; all signals nominal, flow-power correlation > 0.98.
