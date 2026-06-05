@@ -10,9 +10,12 @@ Pump curves from Grundfos NK/NKE databooklet:
 https://www.motralec.com/public/fichiers/docs/grundfos-nke-nk-english.pdf
 Performance range: 2-2000 m3/h, 2-150 m head, 0.37-315 kW motors
 
-All pressure values are gauge pressure (relative to 1 atm absolute).
+Notes:
+1) All pressure values are gauge pressure (relative to 1 atm absolute).
 Conversion: discharge_gauge = suction_gauge + (head_m * 0.0981)
 NPSHa must be calculated using absolute pressure: P_abs = P_gauge + 1.013
+
+2) Vibration modeled as quadratic function of flow, minimum at BEP (~90% of nominal flow). 
 """
 
 import numpy as np

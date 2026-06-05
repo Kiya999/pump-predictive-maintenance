@@ -57,7 +57,7 @@ def print_plausibility_checks(df):
     corr_p_t = df["motor_power_kw"].corr(df["motor_temp_c"])
     print(f"Flow vs dP: {corr_f_dp:.3f} (expected negative -- pump curve)")
     print(f"Flow vs Power: {corr_f_pw:.3f} (expected positive)")
-    print(f"Flow vs Vibration: {corr_f_v:.3f} (expected U-shape, weak linear)")
+    print(f"Flow vs Vibration: {corr_f_v:.3f} (expected weak linear)")
     print(f"Power vs Temp: {corr_p_t:.3f} (expected positive)")
 
     t_min, t_max = df["motor_temp_c"].min(), df["motor_temp_c"].max()
@@ -103,7 +103,7 @@ def print_weekly_ttest(df):
 
 
 def plot_timeseries(df, asset_name, model_name, validation_folder):
-    week1 = df[df["timestamp"] < df["timestamp"][0] + pd.Timedelta(days=7)]
+    week1 = df[df["timestamp"] < df["timestamp"].iloc[0] + pd.Timedelta(days=7)]
     fig, axes = plt.subplots(4, 2, figsize=(16, 12), sharex=True)
     signals = [
         ("flow_m3h", "Flow Rate (m3/h)", axes[0, 0]),
@@ -250,6 +250,12 @@ if __name__ == "__main__":
         dtype={"asset_id": "category", "flow_m3h": "float32"}
     )
 
-    # Validate first asset (P-0100, NK 32-125)
-    asset_df = df[df["asset_id"] == "P-0100"].copy()
-    run_validation(asset_df, asset_name="P-0100", model_name="NK 32-125")
+    # # Validate first asset (P-0100, NK 32-125)
+    # asset_df = df[df["asset_id"] == "P-0100"].copy()
+    # run_validation(asset_df, asset_name="P-0100", model_name="NK 32-125")
+
+    # Validate all assets
+    for asset_id in df["asset_id"].cat.categories:
+        asset_df = df[df["asset_id"] == asset_id].copy()
+        model_name = asset_df["pump_model"].iloc[0]
+        run_validation(asset_df, asset_name=asset_id, model_name=model_name)
