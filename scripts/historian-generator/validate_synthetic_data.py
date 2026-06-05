@@ -45,10 +45,23 @@ def print_signal_stats(df):
 def print_plausibility_checks(df):
     print("-"*40)
     print("\nPhysical Plausibility Checks:")
-    assert (df["disch_pressure_bar"] > df["suction_pressure_bar"]).all()
-    print("Discharge > suction pressure across all rows: ok")
-    assert (df["diff_pressure_bar"] > 0).all()
-    print("Differential pressure is always positive: ok")
+    
+    failures = []
+    for aid in df["asset_id"].unique():
+        if aid == "P-0700":
+            continue
+        sub = df[df["asset_id"] == aid]
+        if not (sub["disch_pressure_bar"] > sub["suction_pressure_bar"]).all():
+            failures.append(aid)
+    if failures:
+        print(f"Assets with discharge <= suction: {failures}")
+    else:
+        print("Discharge > suction pressure across all rows: ok")    
+    
+    
+    diff_positive = (df["diff_pressure_bar"] > 0).all()
+    print(f"Differential pressure always positive: {diff_positive}")
+
     print()
     
     corr_f_dp = df["flow_m3h"].corr(df["diff_pressure_bar"])
@@ -101,6 +114,16 @@ def print_weekly_ttest(df):
     else:
         print("  -> Not statistically significant (p >= 0.05)")
 
+def print_failures(df):
+    print("-"*40)
+    if "failure_type" in df.columns:
+        print("Failure type column exists")
+        for ft in df["failure_type"].unique():
+            if ft != "none":
+                count = (df["failure_type"] == ft).sum()
+                print(f"    {ft}: {count} rows")
+    else:
+        print("No failure_type column")
 
 def plot_timeseries(df, asset_name, model_name, validation_folder):
     week1 = df[df["timestamp"] < df["timestamp"].iloc[0] + pd.Timedelta(days=7)]
@@ -231,7 +254,8 @@ def run_validation(df, asset_name="P-0100", model_name="NK 32-125"):
     print_plausibility_checks(df)
     print_day_night_weekday_weekend(df)
     print_weekly_ttest(df)
-
+    print_failures(df)
+    
     plot_timeseries(df, asset_name, model_name, validation_folder)
     plot_pump_curve(df, asset_name, model_name, validation_folder)
     plot_correlation_matrix(df, asset_name, validation_folder)

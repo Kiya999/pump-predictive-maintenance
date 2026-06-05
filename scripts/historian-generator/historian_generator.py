@@ -23,30 +23,7 @@ import pandas as pd
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-
-
-@dataclass
-class HistorianConfig:
-    num_assets: int = 10
-    period_days: int = 365
-    freq_min: int = 1
-    noise_level: float = 0.02
-    drift_rate: float = 0.001
-    season_amp: float = 0.3
-    base_time: datetime = field(default_factory=lambda: datetime(2025, 1, 1, 0, 0, 0))
-    seed: int = 42
-
-    def __post_init__(self):
-        assert self.num_assets >= 1, "num_assets must be >= 1"
-        assert self.period_days >= 1, "period_days must be >= 1"
-        assert self.freq_min >= 1, "freq_min must be >= 1"
-        assert 0 <= self.noise_level <= 0.5, "noise_level out of range"
-        assert 0 <= self.drift_rate <= 0.1, "drift_rate out of range"
-        assert 0 <= self.season_amp <= 0.5, "season_amp out of range"
-        self.n_samples = self.period_days * 24 * 60 // self.freq_min
-        self.time_index = [self.base_time + timedelta(minutes=i * self.freq_min)
-                          for i in range(self.n_samples)]
-
+import sqlite3
 
 # Nominal operating points from Grundfos NK/NKE databooklet
 # Values are approximate BEP duty points from the biggest impleller size curve
@@ -167,6 +144,49 @@ PUMP_CURVES = [
 ]
 
 
+FAILURE_SCENARIOS = [
+    # Bearing degradation on P-0100, starting day 100, ramp 45 days, severity 4
+    {"scenario": "bearing", "asset_id": "P-0100", "start_day": 100, "ramp_days": 45, "final_severity": 4.0},
+    # Cavitation on P-0300, starting day 200, ramp 60 days, severity 3
+    {"scenario": "cavitation", "asset_id": "P-0300", "start_day": 200, "ramp_days": 60, "final_severity": 3.0},
+    # Insulation on P-0500, starting day 150, ramp 120 days, severity 3.5
+    {"scenario": "insulation", "asset_id": "P-0500", "start_day": 150, "ramp_days": 120, "final_severity": 3.5},
+]    
+
+@dataclass
+class HistorianConfig:
+    num_assets: int = 10
+    period_days: int = 365 # Duration of simulation
+    freq_min: int = 1 # Sampling interval
+    noise_level: float = 0.02 # amplitude of random noise (fraction of nominal)
+    drift_rate: float = 0.001 # long‑term drift per day (multiplicative)
+    season_amp: float = 0.3
+    base_time: datetime = field(default_factory=lambda: datetime(2025, 1, 1, 0, 0, 0))
+    seed: int = 42
+    failure_scenarios: list = field(default_factory=list)
+    # Each element: dict with keys:
+    #    "scenario" (str: "bearing", "cavitation", "insulation"),
+    #    "asset_id" (str),
+    #    "start_day" (int, day offset from base_time),
+    #    "ramp_days" (int, duration of degradation),
+    #    "final_severity" (float, multiplier for signal change)
+
+    gap_fraction: float = 0.001 # approximate fraction of rows to remove
+    duplicate_per_asset: int = 3 # number of duplicate timestamps per asset
+    unit_mismatch_asset: str = "P-0700" # asset that gets pressure in kPa instead of bar
+
+    def __post_init__(self):
+        assert self.num_assets >= 1, "num_assets must be >= 1"
+        assert self.period_days >= 1, "period_days must be >= 1"
+        assert self.freq_min >= 1, "freq_min must be >= 1"
+        assert 0 <= self.noise_level <= 0.5, "noise_level out of range"
+        assert 0 <= self.drift_rate <= 0.1, "drift_rate out of range"
+        assert 0 <= self.season_amp <= 0.5, "season_amp out of range"
+        self.n_samples = self.period_days * 24 * 60 // self.freq_min
+        self.time_index = [self.base_time + timedelta(minutes=i * self.freq_min)
+                          for i in range(self.n_samples)]
+
+
 def _daily_pattern(t_hours):
     # Sine wave peaks around 14:00, troughs around 02:00
     raw = np.sin(np.pi * (t_hours - 6) / 12)
@@ -212,7 +232,7 @@ def generate_suction_pressure(asset, flow, config, rng):
     base_p = asset["suction_pressure_bar"]
     flow_frac = flow / asset["nominal_flow_m3h"]
     # Friction losses increase slightly with flow
-    friction_drop = 0.05 * (flow_frac - 0.5)
+    friction_drop = 0.05 * np.maximum(flow_frac - 0.5, 0.0) # Keeps friction_loss at zero below 50% flow, then ramps linearly
     noise = rng.normal(0, 0.01, size=len(flow))
     p = base_p - friction_drop + noise
     p = np.clip(p, base_p * 0.7, base_p * 1.3)
@@ -293,6 +313,90 @@ def apply_thermal_inertia(signal, tau_min=15, dt_min=1):
     return filtered
 
 
+# Failure scenario injection functions
+def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day, ramp_days, final_severity, rng):
+    # Gradual increase in vibration over ramp_days, then temperature rise.
+    # P-F lead time: 2-10 weeks
+
+    n = len(t_days)
+    ramp = np.ones(n)
+    mask = t_days >= start_day
+    if not mask.any():
+        return signal_vibration, signal_temp
+    
+    t_rel = (t_days[mask] - start_day) / ramp_days
+    t_rel = np.clip(t_rel, 0, 1)
+    ramp[mask] = 1.0 + (final_severity - 1.0) * t_rel
+
+    noise_scale = 0.005 * ramp
+    noise = rng.normal(0, noise_scale, size=n)
+    signal_vibration = signal_vibration * ramp + noise
+    signal_vibration = np.clip(signal_vibration, 0.01, 2.0)
+
+    # dalayed effect: temperature rise only after 60% of ramp
+    temp_start = start_day + 0.6 * ramp_days
+    t_rel_temp = np.clip((t_days - temp_start) / ramp_days, 0, 1)
+    temp_drift = 5.0 * final_severity * t_rel_temp
+    signal_temp = signal_temp + temp_drift
+    
+    signal_temp = np.clip(signal_temp, 15, 120)
+
+    return signal_vibration, signal_temp
+
+
+def inject_cavitation(signal_flow, signal_diff_p, signal_vibration, t_days, start_day, ramp_days, final_severity, rng):
+    # Periodic spikes in differential pressure, flow instability, increasing vibration.
+    # P-F lead time: weeks to months (days if severe)
+    
+    n = len(t_days)
+    mask = t_days >= start_day
+    if not mask.any():
+        return signal_flow, signal_diff_p, signal_vibration
+
+    t_rel = (t_days - start_day) / ramp_days
+    t_rel = np.clip(t_rel, 0, 1)
+
+    spike_amp = 0.1 * final_severity * t_rel
+    spike_prob = 0.001 * (1 + 5 * t_rel)
+    spikes = rng.uniform(0, 1, size=n) < spike_prob
+
+    spike_val = spike_amp * rng.normal(0, 1, size=n) * spikes
+    signal_diff_p = signal_diff_p + spike_val
+
+    flow_noise = 0.05 * final_severity * t_rel * signal_flow.std() * rng.normal(0, 1, size=n)
+    signal_flow = signal_flow + flow_noise
+    signal_flow = np.clip(signal_flow, 0.1, signal_flow.max() * 1.1)
+
+    vib_ramp = 1.0 + (final_severity - 1.0) * t_rel
+    noise_vib = rng.normal(0, 0.01 * vib_ramp, size=n)
+    signal_vibration = signal_vibration * vib_ramp + noise_vib
+    signal_vibration = np.clip(signal_vibration, 0.01, 2.0)
+
+    return signal_flow, signal_diff_p, signal_vibration
+
+
+def inject_insulation_degradation(signal_temp, signal_power, t_days, start_day, ramp_days, final_severity, rng):
+    # Slow drift in motor temperature and gradual increase in power draw at same flow.
+    # P-F lead time: months to years
+    n = len(t_days)
+    mask = t_days >= start_day
+    if not mask.any():
+        return signal_temp, signal_power
+
+    t_rel = (t_days - start_day) / ramp_days
+    t_rel = np.clip(t_rel, 0, 1)
+
+    temp_drift = 5 * final_severity * t_rel
+    signal_temp = signal_temp + temp_drift
+    signal_temp = np.clip(signal_temp, 15, 110)
+
+    power_ramp = 1.0 + 0.15 * (final_severity - 1.0) * t_rel
+    noise_power = rng.normal(0, 0.01 * power_ramp, size=n)
+    signal_power = signal_power * power_ramp + noise_power
+    signal_power = np.clip(signal_power, 0, signal_power.max() * 1.2)
+
+    return signal_temp, signal_power
+
 class SyntheticHistorian:
 
     def __init__(self, config: HistorianConfig):
@@ -327,6 +431,30 @@ class SyntheticHistorian:
         vibration = generate_vibration(asset, flow, self.config, self.rng)
         speed = generate_speed(asset, self.t_hours, self.config, self.rng)
 
+        for scenario in self.config.failure_scenarios:
+            if scenario["asset_id"] != asset["asset_id"]:
+                continue
+            sname = scenario.get("scenario")
+            start_day = scenario.get("start_day", 30)
+            ramp_days = scenario.get("ramp_days", 60)
+            final_severity = scenario.get("final_severity", 3.0)
+            if sname == "bearing":
+                vibration, temp = inject_bearing_degradation(
+                    vibration, temp, self.t_days, start_day, ramp_days, final_severity, self.rng)
+            elif sname == "cavitation":
+                flow, diff_p, vibration = inject_cavitation(
+                    flow, diff_p, vibration, self.t_days, start_day, ramp_days, final_severity, self.rng)
+                disch_p = suction_p + diff_p
+                
+                # Recalculate motor power and temperature using updated flow and diff_p
+                power = generate_motor_power(asset, flow, diff_p, self.config, self.rng)
+                temp_raw = generate_motor_temp(self.t_days, power, asset, self.config, self.rng)
+                temp = apply_thermal_inertia(temp_raw, tau_min=15, dt_min=self.config.freq_min)                
+
+            elif sname == "insulation":
+                temp, power = inject_insulation_degradation(
+                    temp, power, self.t_days, start_day, ramp_days, final_severity, self.rng)
+    
         data = {
             "timestamp": self.timestamps,
             "asset_id": asset["asset_id"],
@@ -341,7 +469,14 @@ class SyntheticHistorian:
             "vibration_mm_s": np.round(vibration, 4),
             "speed_rpm": np.round(speed, 1),
         }
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+    
+        df["failure_type"] = "none"
+        for scenario in self.config.failure_scenarios:
+            if scenario["asset_id"] == asset["asset_id"]:
+                df.loc[self.t_days >= scenario["start_day"], "failure_type"] = scenario["scenario"]
+    
+        return df
 
     def generate_all(self):
         print(f"Generating {self.config.num_assets} assets x "
@@ -355,11 +490,58 @@ class SyntheticHistorian:
             df = self.generate_asset_data(asset)
             all_dfs.append(df)
         result = pd.concat(all_dfs, ignore_index=True)
-        print(f"  Total rows: {len(result):,}")
+        print(f"  Before data quality issues addition: {len(result):,} rows")
+    
+        result = self.inject_data_quality_issues(result)
+    
+        # Sort by timestamp then asset_id for consistency
+        result = result.sort_values(["timestamp", "asset_id"]).reset_index(drop=True)        
+        print(f"  After data quality issues addition: {len(result):,} rows")
         print(f"  Total columns: {len(result.columns)}")
         return result
 
-if __name__ == "__main__":
+    def inject_data_quality_issues(self, df):
+        rng = self.rng
+        cfg = self.config
+    
+        # Remove random gaps
+        gap_indices = []
+        for asset_id in df["asset_id"].unique():
+            mask = df["asset_id"] == asset_id
+            idx = df.index[mask]
+            n_remove = max(1, int(len(idx) * cfg.gap_fraction))
+            remove = rng.choice(idx, size=n_remove, replace=False)
+            gap_indices.extend(remove.tolist())
+        df = df.drop(index=gap_indices)
+    
+        # Add duplicate timestamps
+        for asset_id in df["asset_id"].unique():
+            for _ in range(cfg.duplicate_per_asset):
+                asset_sub = df[df["asset_id"] == asset_id]
+                if len(asset_sub) == 0:
+                    continue
+                seed_val = int(rng.integers(0, 2**31 - 1))
+                row = asset_sub.sample(1, random_state=seed_val).copy()
+                # shift timestamp forward by 30-120 seconds (simulate duplicate from buffer)
+                row["timestamp"] = row["timestamp"] + pd.Timedelta(seconds=int(rng.integers(30, 120)))
+                row["timestamp"] = row["timestamp"].clip(upper=self.config.base_time + timedelta(days=self.config.period_days - 1/1440)) # This avoids any rows dated after the last intended minute in the year
+                df = pd.concat([df, row], ignore_index=True)
+    
+        # Unit mismatch: for specified asset, convert pressure from bar to kPa (multiply by 100)
+        mism_asset = cfg.unit_mismatch_asset
+        if mism_asset in df["asset_id"].unique():
+            mask = df["asset_id"] == mism_asset
+            # Keep original values but add a note: we label them as kPa in column name
+            # Better: replace values with kPa equivalent (multiply by 100) and update column name
+            for col in ["suction_pressure_bar", "disch_pressure_bar", "diff_pressure_bar"]:
+                df.loc[mask, col] = df.loc[mask, col] * 100
+            # Rename columns for clarity? No – keep names but the values are actually kPa.
+            # The inconsistency is that the unit label is wrong. This is realistic.
+            # We'll leave column names as is; the data is in kPa.
+    
+        return df    
+
+if __name__ == "__main__":  
     config = HistorianConfig(
         num_assets=10,
         period_days=365,
@@ -367,7 +549,9 @@ if __name__ == "__main__":
         noise_level=0.02,
         drift_rate=0.001,
         season_amp=0.3,
-        seed=42
+        seed=42,
+        failure_scenarios=FAILURE_SCENARIOS,
+
     )
     print("Configuration:")
     print(f"Assets: {config.num_assets}")
@@ -375,6 +559,7 @@ if __name__ == "__main__":
     print(f"Freq: {config.freq_min} min")
     print(f"Samples: {config.n_samples:,} per asset")
     print(f"Total rows: {config.num_assets * config.n_samples:,}")
+    print(f"Failure scenarios: {len(FAILURE_SCENARIOS)}")
     print("Outputs: 8 signals per asset (2 ID fields)")
 
     gen = SyntheticHistorian(config)
@@ -382,6 +567,13 @@ if __name__ == "__main__":
     
     output_folder = "output"
     os.makedirs(output_folder, exist_ok=True)
-    output_path = os.path.join(output_folder, "synthetic_historian_10x365_1min.csv")
-    df.to_csv(output_path, index=False)
-    print("Saved.")
+    
+    csv_path = os.path.join(output_folder, "synthetic_historian_10x365_1min.csv")
+    df.to_csv(csv_path, index=False)
+    print(f"CSV saved: {csv_path}")
+
+    db_path = os.path.join(output_folder, "synthetic_historian.db")
+    conn = sqlite3.connect(db_path)
+    df.to_sql("historian_data", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"SQLite saved: {db_path}")
