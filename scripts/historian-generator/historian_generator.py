@@ -15,7 +15,7 @@ Notes:
 Conversion: discharge_gauge = suction_gauge + (head_m * 0.0981)
 NPSHa must be calculated using absolute pressure: P_abs = P_gauge + 1.013
 
-2) Vibration modeled as quadratic function of flow, minimum at BEP (~90% of nominal flow). 
+2) Vibration modeled as quadratic function of flow, minimum at BEP (~90% of nominal flow).
 """
 
 import numpy as np
@@ -127,8 +127,8 @@ PUMP_CURVES = [
         "nominal_head_m": 33,
         "motor_power_kw": 24,
         "npsh_m": 2,
-        "suction_pressure_bar": 1.5, 
-        
+        "suction_pressure_bar": 1.5,
+
     },
     {
         "model": "NK 150-400",
@@ -151,7 +151,7 @@ FAILURE_SCENARIOS = [
     {"scenario": "cavitation", "asset_id": "P-0300", "start_day": 200, "ramp_days": 60, "final_severity": 3.0},
     # Insulation on P-0500, starting day 150, ramp 120 days, severity 3.5
     {"scenario": "insulation", "asset_id": "P-0500", "start_day": 150, "ramp_days": 120, "final_severity": 3.5},
-]    
+]
 
 @dataclass
 class HistorianConfig:
@@ -323,7 +323,7 @@ def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day,
     mask = t_days >= start_day
     if not mask.any():
         return signal_vibration, signal_temp
-    
+
     t_rel = (t_days[mask] - start_day) / ramp_days
     t_rel = np.clip(t_rel, 0, 1)
     ramp[mask] = 1.0 + (final_severity - 1.0) * t_rel
@@ -338,7 +338,7 @@ def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day,
     t_rel_temp = np.clip((t_days - temp_start) / ramp_days, 0, 1)
     temp_drift = 5.0 * final_severity * t_rel_temp
     signal_temp = signal_temp + temp_drift
-    
+
     signal_temp = np.clip(signal_temp, 15, 120)
 
     return signal_vibration, signal_temp
@@ -347,7 +347,7 @@ def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day,
 def inject_cavitation(signal_flow, signal_diff_p, signal_vibration, t_days, start_day, ramp_days, final_severity, rng):
     # Periodic spikes in differential pressure, flow instability, increasing vibration.
     # P-F lead time: weeks to months (days if severe)
-    
+
     n = len(t_days)
     mask = t_days >= start_day
     if not mask.any():
@@ -445,16 +445,16 @@ class SyntheticHistorian:
                 flow, diff_p, vibration = inject_cavitation(
                     flow, diff_p, vibration, self.t_days, start_day, ramp_days, final_severity, self.rng)
                 disch_p = suction_p + diff_p
-                
+
                 # Recalculate motor power and temperature using updated flow and diff_p
                 power = generate_motor_power(asset, flow, diff_p, self.config, self.rng)
                 temp_raw = generate_motor_temp(self.t_days, power, asset, self.config, self.rng)
-                temp = apply_thermal_inertia(temp_raw, tau_min=15, dt_min=self.config.freq_min)                
+                temp = apply_thermal_inertia(temp_raw, tau_min=15, dt_min=self.config.freq_min)
 
             elif sname == "insulation":
                 temp, power = inject_insulation_degradation(
                     temp, power, self.t_days, start_day, ramp_days, final_severity, self.rng)
-    
+
         data = {
             "timestamp": self.timestamps,
             "asset_id": asset["asset_id"],
@@ -470,12 +470,12 @@ class SyntheticHistorian:
             "speed_rpm": np.round(speed, 1),
         }
         df = pd.DataFrame(data)
-    
+
         df["failure_type"] = "none"
         for scenario in self.config.failure_scenarios:
             if scenario["asset_id"] == asset["asset_id"]:
                 df.loc[self.t_days >= scenario["start_day"], "failure_type"] = scenario["scenario"]
-    
+
         return df
 
     def generate_all(self):
@@ -491,11 +491,11 @@ class SyntheticHistorian:
             all_dfs.append(df)
         result = pd.concat(all_dfs, ignore_index=True)
         print(f"  Before data quality issues addition: {len(result):,} rows")
-    
+
         result = self.inject_data_quality_issues(result)
-    
+
         # Sort by timestamp then asset_id for consistency
-        result = result.sort_values(["timestamp", "asset_id"]).reset_index(drop=True)        
+        result = result.sort_values(["timestamp", "asset_id"]).reset_index(drop=True)
         print(f"  After data quality issues addition: {len(result):,} rows")
         print(f"  Total columns: {len(result.columns)}")
         return result
@@ -503,7 +503,7 @@ class SyntheticHistorian:
     def inject_data_quality_issues(self, df):
         rng = self.rng
         cfg = self.config
-    
+
         # Remove random gaps
         gap_indices = []
         for asset_id in df["asset_id"].unique():
@@ -513,7 +513,7 @@ class SyntheticHistorian:
             remove = rng.choice(idx, size=n_remove, replace=False)
             gap_indices.extend(remove.tolist())
         df = df.drop(index=gap_indices)
-    
+
         # Add duplicate timestamps
         for asset_id in df["asset_id"].unique():
             for _ in range(cfg.duplicate_per_asset):
@@ -526,22 +526,17 @@ class SyntheticHistorian:
                 row["timestamp"] = row["timestamp"] + pd.Timedelta(seconds=int(rng.integers(30, 120)))
                 row["timestamp"] = row["timestamp"].clip(upper=self.config.base_time + timedelta(days=self.config.period_days - 1/1440)) # This avoids any rows dated after the last intended minute in the year
                 df = pd.concat([df, row], ignore_index=True)
-    
+
         # Unit mismatch: for specified asset, convert pressure from bar to kPa (multiply by 100)
         mism_asset = cfg.unit_mismatch_asset
         if mism_asset in df["asset_id"].unique():
             mask = df["asset_id"] == mism_asset
-            # Keep original values but add a note: we label them as kPa in column name
-            # Better: replace values with kPa equivalent (multiply by 100) and update column name
             for col in ["suction_pressure_bar", "disch_pressure_bar", "diff_pressure_bar"]:
                 df.loc[mask, col] = df.loc[mask, col] * 100
-            # Rename columns for clarity? No – keep names but the values are actually kPa.
-            # The inconsistency is that the unit label is wrong. This is realistic.
-            # We'll leave column names as is; the data is in kPa.
-    
-        return df    
 
-if __name__ == "__main__":  
+        return df
+
+if __name__ == "__main__":
     config = HistorianConfig(
         num_assets=10,
         period_days=365,
@@ -564,10 +559,10 @@ if __name__ == "__main__":
 
     gen = SyntheticHistorian(config)
     df = gen.generate_all()
-    
+
     output_folder = "output"
     os.makedirs(output_folder, exist_ok=True)
-    
+
     csv_path = os.path.join(output_folder, "synthetic_historian_10x365_1min.csv")
     df.to_csv(csv_path, index=False)
     print(f"CSV saved: {csv_path}")

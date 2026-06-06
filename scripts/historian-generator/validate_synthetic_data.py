@@ -1,8 +1,8 @@
 # validate_synthetic_data.py
 """Validate synthetic pump historian data
 
-Generates diagnostic plots, prints signal statistics, runs physical plausibility checks, 
-and performs Welch's t-test for weekday/weekend demand reduction. 
+Generates diagnostic plots, prints signal statistics, runs physical plausibility checks,
+and performs Welch's t-test for weekday/weekend demand reduction.
 Reads the CSV produced by historian_generator.py.
 """
 import os
@@ -45,7 +45,7 @@ def print_signal_stats(df):
 def print_plausibility_checks(df):
     print("-"*40)
     print("\nPhysical Plausibility Checks:")
-    
+
     failures = []
     for aid in df["asset_id"].unique():
         if aid == "P-0700":
@@ -56,14 +56,14 @@ def print_plausibility_checks(df):
     if failures:
         print(f"Assets with discharge <= suction: {failures}")
     else:
-        print("Discharge > suction pressure across all rows: ok")    
-    
-    
+        print("Discharge > suction pressure across all rows: ok")
+
+
     diff_positive = (df["diff_pressure_bar"] > 0).all()
     print(f"Differential pressure always positive: {diff_positive}")
 
     print()
-    
+
     corr_f_dp = df["flow_m3h"].corr(df["diff_pressure_bar"])
     corr_f_pw = df["flow_m3h"].corr(df["motor_power_kw"])
     corr_f_v = df["flow_m3h"].corr(df["vibration_mm_s"])
@@ -249,13 +249,13 @@ def run_validation(df, asset_name="P-0100", model_name="NK 32-125"):
 
     validation_folder = "validation"
     os.makedirs(validation_folder, exist_ok=True)
-    
+
     print_signal_stats(df)
     print_plausibility_checks(df)
     print_day_night_weekday_weekend(df)
     print_weekly_ttest(df)
     print_failures(df)
-    
+
     plot_timeseries(df, asset_name, model_name, validation_folder)
     plot_pump_curve(df, asset_name, model_name, validation_folder)
     plot_correlation_matrix(df, asset_name, validation_folder)
