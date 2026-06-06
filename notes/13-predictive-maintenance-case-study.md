@@ -166,6 +166,47 @@
 | Generalizability | Single-city dataset; external validity to other cities not established |
 
 ---
+## Case Study 4: Kaggle Pump Sensor Dataset
+**Kaggle dataset: https://www.kaggle.com/datasets/nphantawee/pump-sensor-data/data**
+
+### 1. Utility scale
+
+| Attribute | Value |
+|---|---|
+| Facility context | Water pump system serving a small residential area |
+| System failures in prior year | 7 |
+| Sensor count | 52 sensor series, all raw values |
+| Row count | 220,320 |
+| Time span | April to August (5 months) |
+
+### 2. Data and quality issues
+
+| Item | Details |
+|---|---|
+| Target variable | machine status: Normal (205,836 rows), Recovering (14,477 rows), Broken (7 rows) |
+| Sensor identity | Not documented. Cannot map signals to physical parameters or failure modes. |
+| Missing values | Several sensors have significant gaps. One sensor is entirely empty. |
+| Class imbalance | Only 7 Broken samples across 5 months. Insufficient for supervised learning on that class. |
+| Single pump system | One pump assembly. Generalizability to other pump types unknown. |
+
+### 3. Common preprocessing steps
+
+| Step | Description |
+|---|---|
+| Drop empty sensors | Sensors with 100% missing values removed |
+| Remove low-variance sensors | Sensors with near-zero variance removed |
+| Gap filling | Consecutive NaN gaps up to 30 timesteps forward-filled |
+| Label shifting | Labels shifted by 10 minutes to create a prediction horizon |
+
+### 4. Typical analytical approaches
+
+| Method | Details |
+|---|---|
+| Random Forest | Trained on a subset of highest-separation sensors. Macro F1-score above 0.99 on held-out test data. |
+| LSTM | Two LSTM layers. Predicted recovering phase 10 minutes ahead. Training accuracy near 99% but class imbalance makes accuracy misleading. Validation requires F1, ROC, Kappa. |
+| Feature engineering | Distance from Normal class mean used as engineered feature. Mean aggregation over 10-minute windows improved performance. |
+
+---
 
 ## Cross-Case Synthesis
 
@@ -180,3 +221,4 @@
 | Detection lead time | One example predicted 732 min (actual failure at 1263 min); not validated as consistent lead time | Real-time (hourly classification) | 33.85 day average error (80.41% within 45 days) |
 | Key implementation barrier | Manual paper-based event logs | Class imbalance (95% / 5%) | Data sensitivity and access restrictions |
 | Practical outcome | Prediction enables shift-level maintenance planning based on estimated failure-free time | High-AUC classifier suitable for integration into SCADA supervisory layer | Utility can plan maintenance 33-45 days ahead on average |
+
