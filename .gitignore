@@ -1,6 +1,7 @@
 # Local data and references
 references/references
 scripts/historian-generator/output
+datasets/datasets
 
 *.log
 
