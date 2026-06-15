@@ -79,6 +79,8 @@ def plot_scenario(df, asset_id, info, output_folder):
     ax.set_ylabel(info["ylabel"])
     ax.set_title(f"{info['name']} - {asset_id}")
     ax.grid(True, alpha=0.3)
+    ax.relim()
+    ax.autoscale_view()
     annotate_pf(ax, p_ts, f_ts)
 
     ax2 = axes[1]
@@ -87,6 +89,8 @@ def plot_scenario(df, asset_id, info, output_folder):
     ax2.set_ylabel(info["secondary_ylabel"])
     ax2.set_xlabel("Time")
     ax2.grid(True, alpha=0.3)
+    ax2.relim()
+    ax2.autoscale_view()
     annotate_pf(ax2, p_ts, f_ts, p_label="", f_label="")
 
     fig.autofmt_xdate()

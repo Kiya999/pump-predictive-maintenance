@@ -21,13 +21,12 @@ SIG_COLS = [
 DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
-def welch_ttest(weekday, weekend):
-    n1, n2 = len(weekday), len(weekend)
-    m1, m2 = weekday.mean(), weekend.mean()
-    s1, s2 = weekday.std(ddof=1), weekend.std(ddof=1)
+def welch_ttest(a, b):
+    n1, n2 = len(a), len(b)
+    m1, m2 = a.mean(), b.mean()
+    s1, s2 = a.std(ddof=1), b.std(ddof=1)
     diff = m2 - m1
-    t_stat, p_value = ttest_ind(weekday, weekend, equal_var=False)
-    # Welch-Satterthwaite df
+    t_stat, p_value = ttest_ind(a, b, equal_var=False)
     num = (s1**2 / n1 + s2**2 / n2)**2
     den = (s1**2 / n1)**2 / (n1 - 1) + (s2**2 / n2)**2 / (n2 - 1)
     df_welch = num / den if den > 0 else n1 + n2 - 2
@@ -59,8 +58,14 @@ def print_plausibility_checks(df):
         print("Discharge > suction pressure across all rows: ok")
 
 
-    diff_positive = (df["diff_pressure_bar"] > 0).all()
-    print(f"Differential pressure always positive: {diff_positive}")
+    for aid in df["asset_id"].unique():
+        sub = df[df["asset_id"] == aid]
+        neg_dp = (sub["diff_pressure_bar"] <= 0).sum()
+        if neg_dp > 0:
+            print(f"  {aid}: {neg_dp} rows with diff_pressure <= 0 (check cavitation spikes)")
+        else:
+            print(f"  {aid}: differential pressure always positive")
+
 
     print()
 
@@ -79,7 +84,10 @@ def print_plausibility_checks(df):
     print(f"Vibration range: {v_min:.4f} to {v_max:.4f} mm/s (expected 0.01-0.5)")
 
     s_std = df["speed_rpm"].std()
-    print(f"Speed std dev: {s_std:.2f} RPM (expected <1% of nominal)")
+
+    nominal_speed = df["speed_rpm"].median()
+    pct = s_std / nominal_speed * 100
+    print(f"Speed std dev: {s_std:.2f} RPM ({pct:.2f}% of nominal, expected ~0.2%)")
 
 
 def print_day_night_weekday_weekend(df):

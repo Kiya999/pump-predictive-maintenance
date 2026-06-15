@@ -58,7 +58,7 @@ Observation: Motor temperature drifts up to 65.9 degrees C (compared to approxim
 
 <img src="validation/P-0700_timeseries.png" width="180"> <img src="validation/P-0700_pump_curve.png" width="180"> <img src="validation/P-0700_correlation.png" width="180"> <img src="validation/P-0700_profiles.png" width="180"> <img src="validation/P-0700_weekly.png" width="180">
 
-Observation: Values appear 100 times higher due to kPa/bar confusion. Correlations remain valid; flow-power correlation approximately 0.98.
+Observation: Values appear 100 times higher due to kPa/bar confusion. Flow-power correlation remains valid (0.98). Flow-dP correlation weakens to -0.78 (vs -0.97 on healthy assets) because pressure scaling amplifies noise relative to signal range. This is the expected effect.
 
 ---
 
