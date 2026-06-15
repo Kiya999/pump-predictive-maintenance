@@ -1,4 +1,4 @@
-# test_historian_generator.py
+# tests/test_historian_generator.py
 
 import sys
 import os
