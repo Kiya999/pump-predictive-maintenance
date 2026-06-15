@@ -1,5 +1,7 @@
 # usgs_weather_analysis.py
 
+import os, time, sys, warnings
+
 import dataretrieval.nwis as nwis
 import pandas as pd
 import numpy as np
@@ -8,8 +10,6 @@ import seaborn as sns
 import requests
 from datetime import datetime, timedelta
 from scipy.signal import correlate
-import time, sys, warnings
-
 
 warnings.filterwarnings('ignore')
 
@@ -42,8 +42,10 @@ diffs = df.index.to_series().diff().dropna()
 gaps = diffs[diffs > pd.Timedelta('15 minutes')]
 gap_dur = gaps.sum()
 
+os.makedirs('output', exist_ok=True)
+
 # Save profile
-with open('usgs_data_profile.txt', 'w') as f:
+with open('output/usgs_data_profile.txt', 'w') as f:
     f.write("Station: 01646500 - Potomac River near Wash DC (Little Falls)\n")
     f.write(f"Range: {df.index.min()} to {df.index.max()}\n")
     f.write(f"Records: {len(df)}, Missing: {df[col].isna().sum()}\n")
@@ -88,7 +90,7 @@ ax2.set_ylabel('# gaps')
 axes[2].grid(True, alpha=0.3)
 axes[2].legend(loc='upper left')
 plt.tight_layout()
-plt.savefig('usgs_exploratory_plots.png', dpi=150)
+plt.savefig('output/usgs_exploratory_plots.png', dpi=150)
 
 fig2, ax = plt.subplots(figsize=(12, 5))
 ax.hist(hourly['01646500_cfs'].dropna(), bins=80, density=True,
@@ -97,7 +99,7 @@ ax.set_title('Discharge Distribution')
 ax.set_xlabel('cfs')
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig('usgs_discharge_histogram.png', dpi=150)
+plt.savefig('output/usgs_discharge_histogram.png', dpi=150)
 plt.close('all')
 
 # Weather
@@ -149,7 +151,7 @@ for lag in targets:
 print(f"  Best precip lag: {best_p}h (r={corr_qp[np.argmin(np.abs(lags - best_p))]:.4f})")
 print(f"  Best temp lag:   {best_t}h (r={corr_qt[np.argmin(np.abs(lags - best_t))]:.4f})")
 
-with open('lag_correlation_results.txt', 'w') as f:
+with open('output/lag_correlation_results.txt', 'w') as f:
     f.write(f"Station: 01646500, Period: {start.date()} to {end.date()}\n")
     f.write(f"Samples: {len(combined)}\n\n")
     for lag in targets:
@@ -171,7 +173,7 @@ for ax, (title, corr) in zip(axes3, zip(titles, [corr_qp, corr_qt])):
     ax.set_ylabel("Pearson's r")
     ax.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig('lag_correlation_plots.png', dpi=150)
+plt.savefig('output/lag_correlation_plots.png', dpi=150)
 plt.close('all')
 
 print("Done")
