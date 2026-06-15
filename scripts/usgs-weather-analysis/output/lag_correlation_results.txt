@@ -1,0 +1,11 @@
+Station: 01646500, Period: 2025-06-15 to 2026-06-15
+Samples: 8351
+
+lag=0h  Q vs Precip r=0.0288  Q vs Temp r=0.1961
+lag=6h  Q vs Precip r=0.0442  Q vs Temp r=0.1929
+lag=12h  Q vs Precip r=0.0529  Q vs Temp r=0.1893
+lag=24h  Q vs Precip r=0.0583  Q vs Temp r=0.1794
+
+Best within +/-72h:
+  Precip: lag=72h, r=0.1275
+  Temp:   lag=-72h, r=0.2514
