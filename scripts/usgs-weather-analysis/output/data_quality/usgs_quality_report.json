@@ -1,5 +1,5 @@
 {
-  "row_count": 95704,
+  "row_count": 95728,
   "column_count": 2,
   "completeness": {
     "per_column": {
@@ -3256,12 +3256,12 @@
     "discharge_cfs": {
       "method": "global IQR",
       "q1": 1890.0,
-      "q3": 7700.0,
-      "iqr": 5810.0,
-      "lower_fence": -6825.0,
-      "upper_fence": 16415.0,
-      "outlier_count": 5411,
-      "outlier_pct": 5.654
+      "q3": 7690.0,
+      "iqr": 5800.0,
+      "lower_fence": -6810.0,
+      "upper_fence": 16390.0,
+      "outlier_count": 5504,
+      "outlier_pct": 5.75
     }
   },
   "unit_consistency": {
@@ -3270,11 +3270,11 @@
   },
   "signal_stats": {
     "discharge_cfs": {
-      "mean": 5817.7357,
+      "mean": 5817.087,
       "min": 750.0,
       "max": 45400.0,
-      "std": 6416.977,
-      "count": 95704
+      "std": 6416.3033,
+      "count": 95728
     }
   }
 }

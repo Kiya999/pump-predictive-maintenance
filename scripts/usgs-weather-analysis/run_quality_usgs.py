@@ -4,6 +4,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../historian-generator')))
 
 import json
+import pandas as pd
 from datetime import datetime, timedelta
 import dataretrieval.nwis as nwis
 from data_quality import assess_quality, format_report
@@ -14,14 +15,20 @@ SITE = '01646500'
 end = datetime.now()
 start = end - timedelta(days=365)
 
-print(f"Downloading USGS streamflow ({start.date()} to {end.date()})...")
-try:
-    df, meta = nwis.get_iv(sites=SITE, start=start.strftime('%Y-%m-%d'),
-                            end=end.strftime('%Y-%m-%d'), parameterCd='00060')
-    print(f"  Downloaded {len(df)} records")
-except Exception as e:
-    print(f"Error downloading: {e}")
-    sys.exit()
+csv_path = "output/usgs_raw.csv"
+if not os.path.exists(csv_path):
+    print(f"Downloading USGS streamflow ({start.date()} to {end.date()})...")
+    try:
+        df, meta = nwis.get_iv(sites=SITE, start=start.strftime('%Y-%m-%d'),
+                                end=end.strftime('%Y-%m-%d'), parameterCd='00060')
+        df[['00060']].to_csv(csv_path)
+        print(f"  Downloaded {len(df)} records, saved to {csv_path}")
+    except Exception as e:
+        print(f"Error downloading: {e}")
+        sys.exit()
+else:
+    print(f"Loading cached USGS data from {csv_path}...")
+    df = pd.read_csv(csv_path, index_col=0, parse_dates=True)
 
 df_clean = df[['00060']].dropna()
 df_clean.columns = ['discharge_cfs']
