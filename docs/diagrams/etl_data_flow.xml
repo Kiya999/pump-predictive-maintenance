@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="vvkhpUmh2A4t23zeZO8a">
+    <mxGraphModel dx="737" dy="408" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-25" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;curved=0;exitX=1;exitY=0.5;entryX=0;entryY=0.75;" target="OXe5S6EemWJQ7STVyvAc-5" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="226" y="605" />
+              <mxPoint x="226" y="595" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-1" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;arcSize=24;" value="Historian CSV" vertex="1">
+          <mxGeometry height="60" width="150" x="60" y="575" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-24" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;curved=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="OXe5S6EemWJQ7STVyvAc-5" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="226" y="515" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-2" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;arcSize=24;" value="Alarm log CSV" vertex="1">
+          <mxGeometry height="60" width="150" x="60" y="485" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-9" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitDx=0;exitDy=0;entryDx=0;entryDy=0;curved=0;exitX=1;exitY=0.5;entryX=0;entryY=0.25;" target="OXe5S6EemWJQ7STVyvAc-5">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="226" y="425" />
+              <mxPoint x="226" y="435" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-4" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;arcSize=24;" value="Environmental CSV" vertex="1">
+          <mxGeometry height="60" width="150" x="60" y="395" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-10" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;curved=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="OXe5S6EemWJQ7STVyvAc-6" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="417" y="515" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;h2&gt;Extract Layer&lt;/h2&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;extract_historian()&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;extract_alarm_log()&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;extract_environmental()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="320" width="160" x="242" y="355" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-15" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;curved=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="OXe5S6EemWJQ7STVyvAc-13" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="607" y="515" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;h2&gt;Transform Layer&lt;/h2&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Timestamp Normalization (UTC)&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Resampling (1-min / event / 15-min)&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Unit Conversion (kPA -&amp;gt; bar)&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Column Standardization&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Quality Flagging&lt;/div&gt;" vertex="1">
+          <mxGeometry height="320" width="160" x="432" y="355" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-17" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;curved=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="OXe5S6EemWJQ7STVyvAc-16" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="807" y="515" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-13" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" value="&lt;h2&gt;SQLite Database&lt;/h2&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;historian_clean&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;alarm_log_clean&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;environmental_clean&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;pipeline_runs&lt;/div&gt;" vertex="1">
+          <mxGeometry height="310" width="170" x="622" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-19" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;curved=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="OXe5S6EemWJQ7STVyvAc-18" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="957" y="515" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-16" parent="1" style="whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;" value="(Future)&lt;div&gt;Analytics Module&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="822" y="485" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-18" parent="1" style="whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;" value="(Future)&lt;div&gt;Dashboard&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="972" y="485" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-28" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-29" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="OXe5S6EemWJQ7STVyvAc-6" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="490" y="680" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-29" parent="1" style="rounded=1;whiteSpace=wrap;html=1;direction=west;arcSize=21;" value="&lt;h2&gt;Data Quality Module&lt;/h2&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;quality_report.json&lt;/div&gt;" vertex="1">
+          <mxGeometry height="110" width="158" x="433" y="713" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-31" edge="1" parent="1" source="OXe5S6EemWJQ7STVyvAc-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="OXe5S6EemWJQ7STVyvAc-5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="OXe5S6EemWJQ7STVyvAc-30" parent="1" style="rounded=1;whiteSpace=wrap;html=1;direction=west;arcSize=21;" value="&lt;h2&gt;Config&lt;/h2&gt;&lt;div&gt;etl_config.py&lt;/div&gt;" vertex="1">
+          <mxGeometry height="110" width="158" x="243" y="713" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
