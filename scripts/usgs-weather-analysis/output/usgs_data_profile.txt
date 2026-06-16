@@ -1,6 +1,6 @@
 Station: 01646500 - Potomac River near Wash DC (Little Falls)
-Range: 2025-06-15 04:00:00+00:00 to 2026-06-16 01:50:00+00:00
-Records: 95812, Missing: 0
-Approved: 75773, Provisional: 19890
-Gaps >15min: 242 (total 25 days 14:35:00)
-Discharge (cfs): min=750, max=45400, mean=5815, median=3040
+Range: 2025-06-16 04:00:00+00:00 to 2026-06-16 13:50:00+00:00
+Records: 95883, Missing: 0
+Approved: 75700, Provisional: 20034
+Gaps >15min: 224 (total 25 days 04:20:00)
+Discharge (cfs): min=750, max=45400, mean=5804, median=3050

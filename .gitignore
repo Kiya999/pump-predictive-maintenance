@@ -10,3 +10,4 @@ __pycache__/
 *.pyc
 .env
 .venv/
+scripts/etl-pipeline/output/etl_pipeline.db
