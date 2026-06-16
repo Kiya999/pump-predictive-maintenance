@@ -145,7 +145,7 @@ PUMP_CURVES = [
 ]
 
 FAILURE_SCENARIOS = [
-    # Bearing degradation on P-0100, starting day 100, ramp 45 days, severity 4
+    # Bearing degradation on P-0100, starting day 100, ramp 260 days, severity 4
     {"scenario": "bearing", "asset_id": "P-0100", "start_day": 100, "ramp_days": 260, "final_severity": 4.0},
     # Cavitation on P-0300, starting day 200, ramp 60 days, severity 3
     {"scenario": "cavitation", "asset_id": "P-0300", "start_day": 200, "ramp_days": 60, "final_severity": 3.0},
