@@ -123,6 +123,7 @@ print(f"  {len(weather)} records")
 # Join and correlate
 combined = hourly.join(weather, how='inner').dropna()
 print(f"Joined: {len(combined)} records")
+combined.to_csv('output/combined_data.csv')
 
 if len(combined) < 500:
     sys.exit("Not enough data")
