@@ -13,7 +13,7 @@ Key observations for failed assets:
 
 <img src="validation/P-0100_timeseries.png" width="180"> <img src="validation/P-0100_pump_curve.png" width="180"> <img src="validation/P-0100_correlation.png" width="180"> <img src="validation/P-0100_profiles.png" width="180"> <img src="validation/P-0100_weekly.png" width="180">
 
-Observation: Vibration increases to approximately 0.37 mm/s, losing the healthy U-shape (vibration vs flow becomes monotonic). Flow-vibration correlation shifts from strong negative (-0.71) to weak positive (+0.16). Temperature drifts upward (max 72.6 degrees C).
+Observation: Vibration increases to approximately 0.19 mm/s, losing the healthy U-shape (vibration vs flow becomes monotonic). Flow-vibration correlation shifts from strong negative (-0.71) to weak positive (+0.16). Temperature drifts upward (max 52.6 degrees C).
 
 ---
 

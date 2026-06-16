@@ -217,7 +217,7 @@ def plot_diurnal_profiles(df, asset_name, model_name, validation_folder):
     axes[1, 0].set_xlabel("Hour of Day")
     axes[1, 0].grid(True, alpha=0.3)
 
-    # Vibration vs flow -- U-shape expected, minimum at BEP
+    # Vibration vs flow
     df["flow_bin"] = pd.cut(df["flow_m3h"], bins=20)
     vib_by_flow = df.groupby("flow_bin", observed=False)["vibration_mm_s"].mean()
     bin_centers = [(b.left + b.right) / 2 for b in vib_by_flow.index]

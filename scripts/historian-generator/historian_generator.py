@@ -15,7 +15,8 @@ Notes:
 Conversion: discharge_gauge = suction_gauge + (head_m * 0.0981)
 NPSHa must be calculated using absolute pressure: P_abs = P_gauge + 1.013
 
-2) Vibration modeled as quadratic function of flow, minimum at BEP (~90% of nominal flow).
+2) Vibration baseline: constant healthy-bearing signal; degradation scenarios inject
+bearing wear, cavitation, or insulation faults as multiplicative ramps with increasing noise.
 """
 
 import numpy as np
@@ -143,10 +144,9 @@ PUMP_CURVES = [
     },
 ]
 
-
 FAILURE_SCENARIOS = [
     # Bearing degradation on P-0100, starting day 100, ramp 45 days, severity 4
-    {"scenario": "bearing", "asset_id": "P-0100", "start_day": 100, "ramp_days": 45, "final_severity": 4.0},
+    {"scenario": "bearing", "asset_id": "P-0100", "start_day": 100, "ramp_days": 260, "final_severity": 4.0},
     # Cavitation on P-0300, starting day 200, ramp 60 days, severity 3
     {"scenario": "cavitation", "asset_id": "P-0300", "start_day": 200, "ramp_days": 60, "final_severity": 3.0},
     # Insulation on P-0500, starting day 150, ramp 120 days, severity 3.5
@@ -284,13 +284,9 @@ def generate_motor_temp(t_days, power, asset, config, rng):
 
 
 def generate_vibration(asset, flow, config, rng):
-    # Minimum vibration at BEP flow (~90% of nominal), increases away from it
-    flow_frac = flow / asset["nominal_flow_m3h"]
     base_vib = 0.04
-    off_bep_penalty = 0.15 * (flow_frac - 0.9)**2
-    vibration = base_vib + off_bep_penalty
-    noise = rng.normal(0, 0.005, size=len(flow))
-    vib = vibration + noise
+    noise = rng.normal(0, 0.001, size=len(flow))
+    vib = base_vib + noise
     vib = np.clip(vib, 0.01, 0.5)
     return vib
 
@@ -315,8 +311,7 @@ def apply_thermal_inertia(signal, tau_min=15, dt_min=1):
 
 # Failure scenario injection functions
 def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day, ramp_days, final_severity, rng):
-    # Gradual increase in vibration over ramp_days, then temperature rise.
-    # P-F lead time: 2-10 weeks
+    # noise only applied during degradation window, proportional to ramp
 
     n = len(t_days)
     ramp = np.ones(n)
@@ -326,10 +321,15 @@ def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day,
 
     t_rel = (t_days[mask] - start_day) / ramp_days
     t_rel = np.clip(t_rel, 0, 1)
+    
+    # LINEAR RAMP:
     ramp[mask] = 1.0 + (final_severity - 1.0) * t_rel
+    
+    # EXPONENTIAL RAMP:
+    # ramp[mask] = 1.0 + (final_severity - 1.0) * (np.exp(2 * t_rel) - 1) / (np.exp(2) - 1)
 
-    noise_scale = 0.005 * ramp
-    noise = rng.normal(0, noise_scale, size=n)
+    noise = np.zeros(n)
+    noise[mask] = rng.normal(0, 0.002 * ramp[mask], size=mask.sum())
     signal_vibration = signal_vibration * ramp + noise
     signal_vibration = np.clip(signal_vibration, 0.01, 2.0)
 
