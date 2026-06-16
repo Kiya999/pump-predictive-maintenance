@@ -26,6 +26,6 @@ def print_tree(dir_path, prefix="", max_depth=3, ignore_dirs=None):
 
 
 
-root = r"C:\Users\Erick\My Drive (kiyarashaminfar@gmail.com)\WATER"
+root = r"C:\Users\Erick\My Drive (kiyarashaminfar@gmail.com)\DCWATER\pump-predictive-maintenance"
 print(f"Structure of: {root}\n")
 print_tree(root, max_depth=5)
