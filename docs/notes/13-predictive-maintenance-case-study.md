@@ -291,3 +291,79 @@ SMOTE application showed statistically significant improvement in F1-score (t = 
 | Generalizability | OBD dataset limited to engine parameters; results may not transfer to other fault types; limited to one domain makes it unclear how well the approach would work elsewhere |
 
 ---
+
+# Case Study 6: Implementation of AI-Based Fault Classification and Anomaly Detection in Hydraulic Centrifugal Pumps
+
+**Turk M.C.; Kazemi Z.; Andersen P.R.; Lemming J.; Larsen P.G. Implementation of Artificial Intelligence-Based Fault Classification and Anomaly Detection: A Case Study on Hydraulic Centrifugal Pumps.**
+
+---
+
+## 1. Utility Scale
+
+| Attribute | Value |
+|---|---|
+| Equipment context | Hydraulic centrifugal pump test stand with configurable inlet/outlet conditions |
+| Sensor integration | Custom data logging unit; total cost <$450 |
+| Failure scenarios | 12 known scenarios: worn impeller/plate/knives, closed inlet/outlet, 40/50/59 Hz operation, wrong rotation, and idle mode |
+| Data frequency | 1 measurement per second; local storage on memory card |
+| System scope | Single pump assembly; remote data transfer via GPRS or manual export |
+
+---
+
+## 2. Data Sources
+
+| Source | Details |
+|---|---|
+| Sensor types | 3-axis vibration (acceleration), pressure, motor voltage (3-phase), motor current (3-phase), enclosure temperature, pump body temperature (cooling channel) |
+| Raw data volume | 14 initial channels; reduced to 6 core features via autoencoder |
+| Signal processing | FIR filter for noise removal and signal stability |
+| Training data | Ordinary operation (2 hours); fault scenarios (5–15 min each, multiple sessions) |
+| Class distribution (raw) | Imbalanced: 2-hour normal operation vs. 5–15 min fault scenarios (approx. 8:1 ratio) |
+
+---
+
+## 3. Analytical Methods: Imbalance and Anomaly Handling
+
+| Technique | Approach | Purpose |
+|---|---|---|
+| Gaussian Noise Addition | Augment minority class samples to achieve balance | Address training set imbalance without synthetic interpolation |
+| Autoencoder (AE) | Unsupervised learning on 6 features; encoding dimension = 50 (higher than input to capture patterns) | Compute reconstruction error; threshold separates known scenarios from anomalies |
+| Random Forest | 100 estimators; no manual class weighting | Classify known scenarios when reconstruction error is below threshold |
+| MLPClassifier | Logistic activation; soft voting ensemble | Capture non-linear decision boundaries missed by RF |
+| Voting Classifier (VC) | Soft voting ensemble of RF + MLPClassifier predictions | Leverage complementary strengths for improved precision |
+
+---
+
+## 4. Quantified Outcomes
+
+| Metric | Value | Context |
+|---|---|---|
+| RF alone (various tests) | 98.7–100% accuracy | Varies with number of fault scenarios in test set |
+| MLPClassifier alone | 21.9–100% accuracy | Performance degrades as scenario count increases |
+| VC (final validation) | 98.5% minimum accuracy | Extreme test: 16 sessions with 8 scenarios in 2.5 hours; 11/16 detected correctly |
+| Unseen scenario detection | Correctly labeled as anomaly | Idle mode with grid power available (not in training set) |
+| Failed detections | 5/16 sessions | Sessions 3, 6, 7, 12, 14: rapid state transitions or hybrid scenarios |
+
+---
+
+## 5. Key Implications for Model Design
+
+| Implication | Rationale |
+|---|---|
+| Two-stage pipeline (AE -> Classifier) separates concerns | Routes unknown faults to anomaly detector; known faults to classifier; avoids forcing unknown patterns into known classes |
+| Multimodal sensor fusion improves robustness | Redundancy across vibration, pressure, electrical, and thermal signals; single-sensor approach insufficient |
+| Anomaly detection tolerates unlabeled unknowns | No need to balance anomaly class explicitly; reconstruction error provides unsupervised threshold |
+| Ensemble prevents single-model bias | RF robust on regular patterns; MLP catches non-linear transitions in fault onset |
+
+---
+
+## 6. Implementation Challenges
+
+| Challenge | Notes |
+|---|---|
+| Imbalance imposed by safety constraints | Unsafe to run pump with closed outlet >5 min; creates 8:1 imbalance (mitigated via Gaussian noise augmentation rather than SMOTE) |
+| Rapid fault state transitions | Model confusion when scenarios change within seconds (sessions 3, 12); requires denser labeling or multi-scale temporal features |
+| Anomaly threshold selection | Reconstruction error threshold is implicit; no reported false positive rate on normal operation or stability analysis across pump configurations |
+| Generalizability | Single pump, single test setup; no cross-validation on different pump units or real field data |
+
+---
