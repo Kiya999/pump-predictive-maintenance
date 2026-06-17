@@ -166,6 +166,23 @@
 | Generalizability | Single-city dataset; external validity to other cities not established |
 
 ---
+
+## Cross-Case Synthesis (case studies 1-3)
+
+| Dimension | Cwikla and Paprocka 2023 | Velimirovic et al. 2021 | Medeiros et al. 2024 |
+|---|---:|---:|---:|
+| Domain | WWTP pump failure-free time | WWTP pump failure classification | Water supply network pipe failure prediction |
+| Prediction target | Regression: minutes to failure | Binary classification: alarm or no alarm | Regression: days to next failure |
+| Data frequency | Event-based SCADA records (54 events over 10 days) | Hourly averaged sensor data | Daily failure records |
+| Sample size | 54-75 observations | 25,625 measurements (1,818 after balancing) | 1,727 failure samples |
+| Best algorithm | Multiple linear regression + GA | GBT (AUC=0.869) | Manual MLP (MAE=33.85 days) |
+| Best performance metric | R^2=0.96 (Excel) / R^2=1.0 (GA) | AUC=0.869, F1=0.71, Recall=0.87 | MAE=33.85d, MAPE=3.63% |
+| Detection lead time | One example predicted 732 min (actual failure at 1263 min); not validated as consistent lead time | Real-time (hourly classification) | 33.85 day average error (80.41% within 45 days) |
+| Key implementation barrier | Manual paper-based event logs | Class imbalance (95% / 5%) | Data sensitivity and access restrictions |
+| Practical outcome | Prediction enables shift-level maintenance planning based on estimated failure-free time | High-AUC classifier suitable for integration into SCADA supervisory layer | Utility can plan maintenance 33-45 days ahead on average |
+
+---
+
 ## Case Study 4: Kaggle Pump Sensor Dataset
 **Kaggle dataset: https://www.kaggle.com/datasets/nphantawee/pump-sensor-data/data**
 
@@ -208,17 +225,69 @@
 
 ---
 
-## Cross-Case Synthesis
+## Case Study 5: Enhancing Predictive Maintenance in Automotive Industry
+**Mahale Y.; Kolhar S.; More A.S. Enhancing Predictive Maintenance in Automotive Industry: Addressing Class Imbalance Using Advanced Machine Learning Techniques.**
 
-| Dimension | Cwikla and Paprocka 2023 | Velimirovic et al. 2021 | Medeiros et al. 2024 |
-|---|---:|---:|---:|
-| Domain | WWTP pump failure-free time | WWTP pump failure classification | Water supply network pipe failure prediction |
-| Prediction target | Regression: minutes to failure | Binary classification: alarm or no alarm | Regression: days to next failure |
-| Data frequency | Event-based SCADA records (54 events over 10 days) | Hourly averaged sensor data | Daily failure records |
-| Sample size | 54-75 observations | 25,625 measurements (1,818 after balancing) | 1,727 failure samples |
-| Best algorithm | Multiple linear regression + GA | GBT (AUC=0.869) | Manual MLP (MAE=33.85 days) |
-| Best performance metric | R^2=0.96 (Excel) / R^2=1.0 (GA) | AUC=0.869, F1=0.71, Recall=0.87 | MAE=33.85d, MAPE=3.63% |
-| Detection lead time | One example predicted 732 min (actual failure at 1263 min); not validated as consistent lead time | Real-time (hourly classification) | 33.85 day average error (80.41% within 45 days) |
-| Key implementation barrier | Manual paper-based event logs | Class imbalance (95% / 5%) | Data sensitivity and access restrictions |
-| Practical outcome | Prediction enables shift-level maintenance planning based on estimated failure-free time | High-AUC classifier suitable for integration into SCADA supervisory layer | Utility can plan maintenance 33-45 days ahead on average |
+### 1. Utility scale
 
+| Attribute | Value |
+|---|---|
+| Domain | Automotive on-board diagnostics (OBD-II) |
+| Facility context | Fleet vehicle diagnostics and engine performance monitoring |
+| Data source | Kaggle OBD-II crowdsourced dataset |
+| Dataset size | 47,514 rows; 33 diagnostic features |
+| Failure scope | Engine fault detection (binary classification) |
+| Class distribution (raw) | 16.3% failure instances; 83.7% normal operation |
+
+### 2. Data sources
+
+| Source | Details |
+|---|---|
+| OBD-II sensors | Engine speed (RPM), coolant temperature, engine load, throttle position, intake manifold pressure, engine runtime |
+| Target variable | Binary: Engine fault (1) or normal operation (0) |
+| Preprocessing | Missing value imputation (linear interpolation, mean, KNN, forward/backward fill); outlier detection via IQR; z-score normalization |
+| Feature selection | Domain-driven attribute subset selection; final set focused on engine performance indicators |
+
+### 3. Analytical methods: Class imbalance handling
+
+| Technique | Approach | Purpose |
+|---|---|---|
+| SMOTE | Synthetic Minority Oversampling Technique; generates synthetic failure samples via interpolation | Balances class distribution from 16.3%/83.7% to 50%/50% for training |
+| Ensemble methods | Balanced Random Forest, RUSBoost, Easy Ensemble, Balanced Bagging | Combine resampling and boosting/bagging to improve minority class detection |
+| Cost-sensitive learning | Assigns higher misclassification cost to minority class; tested with SVM, logistic regression, decision tree, XGBoost, LightGBM, AdaBoost | Penalizes false negatives more heavily than false positives |
+| Comparison baseline | Standard classifiers without imbalance handling | Establishes improvement magnitude from each technique |
+
+**Evaluation approach:** 
+Precision, recall, F1-score, and ROC-AUC were used as primary metrics rather than accuracy alone, since accuracy is misleading for imbalanced binary classification.
+
+### 4. Quantified outcomes
+
+**SMOTE Performance (Ablation Study):**
+SMOTE application showed statistically significant improvement in F1-score (t = 8.6572, p = 0.0010) and ROC-AUC (t = 7.7971, p = 0.0015) across models tested. SMOTE-based Random Forest achieved F1-score of 0.9954.
+
+**Ensemble Methods (Table 7 summary):**
+- Balanced Random Forest: F1 = 0.9914, ROC-AUC = 0.9999
+- RUSBoost: F1 = 0.9996, ROC-AUC = 1.0000
+- Easy Ensemble: F1 = 1.0000, ROC-AUC = 1.0000 
+- Balanced Bagging: F1 = 0.9988, ROC-AUC = 1.0000
+
+**Cost-Sensitive Learning (Table 8 summary):**
+- XGBoost: Precision = 1.0, Recall = 1.0, F1 = 1.0, ROC-AUC = 1.0 
+- LightGBM: F1 = 0.9926, ROC-AUC = 0.9985
+- AdaBoost: F1 = 1.0000, ROC-AUC = 0.9998
+- Other cost-sensitive models (SVM, LR, DT): F1 range 0.9712–0.9822
+
+**Key finding:** Ensemble methods and cost-sensitive learning outperformed SMOTE-only approaches. Tree-based ensembles (especially XGBoost and Easy Ensemble) achieved highest detection metrics.
+
+### 5. Implementation challenges and insights
+
+| Challenge | Observation |
+|---|---|
+| SMOTE limitations | Generates synthetic samples that may not represent real failure modes; assumes linear separability, which limits its effectiveness on non-linear patterns; introduces synthetic noise that can cause overfitting |
+| Perfect scores concern | Two methods (Easy Ensemble, XGBoost) achieved metrics = 1.0, suggesting potential overfitting or test-set leakage |
+| Ensemble computational cost | Bagging and boosting methods require significant computational resources; RUSBoost and Easy Ensemble require training multiple models in sequence|
+| Feature importance and interpretability | XGBoost feature importance analysis identified most influential OBD parameters; SHAP and LIME explanations provided local and global interpretability |
+| Accuracy as misleading metric | Accuracy alone is inadequate for imbalanced data; F1-score and ROC-AUC are necessary for proper evaluation |
+| Generalizability | OBD dataset limited to engine parameters; results may not transfer to other fault types; limited to one domain makes it unclear how well the approach would work elsewhere |
+
+---
