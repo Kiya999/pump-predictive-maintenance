@@ -1,0 +1,15 @@
+Failure Mode,Flow Rate,Pressure (Diff),Motor Temperature,Motor Power,Vibration,Motor ESA,Alarm Log,Environmental (Discharge),P-F Lead Time
+Bearing wear (rolling element),Partial,Partial,Strong,Partial,Strong,Partial,Unknown,None,2 to 10 weeks
+Bearing wear (sleeve / journal),Partial,Partial,Strong,Partial,Partial,None,Unknown,None,Weeks to months
+Cavitation,Strong,Strong,Partial,Strong,Strong,Partial,Unknown,None,Weeks to months
+Mechanical seal failure,Partial,Partial,Strong,Partial,Partial,None,Unknown,None,Weeks to months
+Shaft misalignment,Partial,Partial,Partial,Partial,Strong,Partial,Unknown,None,Weeks to months
+Impeller erosion,Strong,Strong,Partial,Strong,Partial,None,Unknown,None,Months to years
+Recirculation (low flow),Strong,Strong,Partial,Strong,Partial,Partial,Unknown,None,Weeks to months
+Air entrainment,Strong,Strong,Partial,Strong,Strong,Partial,Unknown,None,Immediate to weeks
+Stator insulation degradation,None,None,Strong,Strong,Partial,Strong,Unknown,None,Months to years
+Rotor bar cracking,None,None,Strong,Strong,Partial,Strong,Unknown,None,Weeks to months
+Winding faults,None,None,Strong,Strong,Partial,Strong,Unknown,None,Months to years
+Voltage unbalance,None,None,Strong,Strong,Partial,Partial,Unknown,None,Months to years
+Fouling and scaling,Strong,Strong,Partial,Strong,Partial,None,Unknown,None,Months to years
+Operating far from BEP,Strong,Strong,Strong,Strong,Strong,Partial,Unknown,None,N/A (accelerator)
