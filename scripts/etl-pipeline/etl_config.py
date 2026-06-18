@@ -16,7 +16,7 @@ CONFIG = {
         },
         "environmental": {
             "path": "../usgs-weather-analysis/output/usgs_raw.csv",
-            "frequency": "15min",
+            "frequency": "5min",
             "timestamp_col": "datetime",
             "tz": "UTC",
         },
@@ -63,7 +63,7 @@ CONFIG = {
         },
         "environmental": {
             "datetime": "timestamp",
-            "60": "discharge_cfs",
+            "00060": "discharge_cfs",
         },
     },
 
