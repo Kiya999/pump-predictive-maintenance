@@ -198,6 +198,15 @@ def transform_historian(df_raw, config):
     df = standardize_columns(df, col_mapping)
     df = add_quality_flags(df, quality_path)
 
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    for col in numeric_cols:
+        if col == 'quality_flag':
+            continue
+        null_mask = df[col].isna()
+        if null_mask.any():
+            df.loc[null_mask, 'quality_flag'] = 'missing'
+            logger.info(f"Flagged {null_mask.sum()} rows as missing for {col} after resampling")
+            
     logger.info(f"Historian transform complete: {len(df)} rows")
     return df
 
@@ -214,6 +223,15 @@ def transform_alarm_log(df_raw, config):
     df = standardize_columns(df, col_mapping)
     df = add_quality_flags(df, quality_path)
 
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    for col in numeric_cols:
+        if col == 'quality_flag':
+            continue
+        null_mask = df[col].isna()
+        if null_mask.any():
+            df.loc[null_mask, 'quality_flag'] = 'missing'
+            logger.info(f"Flagged {null_mask.sum()} rows as missing for {col} after resampling")
+            
     logger.info(f"Alarm log transform complete: {len(df)} rows")
     return df
 
@@ -235,6 +253,15 @@ def transform_environmental(df_raw, config):
 
     df = standardize_columns(df, col_mapping)
     df = add_quality_flags(df, quality_path)
+
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    for col in numeric_cols:
+        if col == 'quality_flag':
+            continue
+        null_mask = df[col].isna()
+        if null_mask.any():
+            df.loc[null_mask, 'quality_flag'] = 'missing'
+            logger.info(f"Flagged {null_mask.sum()} rows as missing for {col} after resampling")
 
     logger.info(f"Environmental transform complete: {len(df)} rows")
     return df
