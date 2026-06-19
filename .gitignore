@@ -11,3 +11,7 @@ __pycache__/
 .env
 .venv/
 scripts/etl-pipeline/output/etl_pipeline.db
+scripts/analytics-pipeline/output/baseline_validation/P-0100_flow_m3h_degrading.html
+scripts/analytics-pipeline/output/baseline_validation/P-0100_vibration_mm_s_degrading.html
+scripts/analytics-pipeline/output/baseline_validation/P-0200_flow_m3h_healthy.html
+scripts/analytics-pipeline/output/baseline_validation/P-0200_vibration_mm_s_healthy.html
