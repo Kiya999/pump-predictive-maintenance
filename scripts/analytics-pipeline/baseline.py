@@ -21,9 +21,14 @@ class BaselineCalculator:
         if self.training_timestamps is None:
             raise ValueError("training_timestamps required for hourly baseline")
 
+        if hasattr(self.training_timestamps, 'dt'):
+            hour_values = self.training_timestamps.dt.hour.values
+        else:
+            hour_values = self.training_timestamps.hour.values
+
         df = pd.DataFrame({
             "signal": self.training_signal.values,
-            "hour": self.training_timestamps.dt.hour,
+            "hour":   hour_values,
         })
         self.hourly_stats = df.groupby("hour")["signal"].agg(["mean", "std"])
 
@@ -49,45 +54,49 @@ class BaselineCalculator:
         upper = baseline + num_std * std_vals
         lower = baseline - num_std * std_vals
 
-        return {"baseline": baseline, "upper": upper, "lower": lower,}
+        return {"baseline": baseline, "upper": upper, "lower": lower}
 
     def apply_hourly(self, full_timestamps, full_signal, num_std=3):
         if self.hourly_stats is None:
             raise ValueError("fit_hourly() not called")
 
-        hours = full_timestamps.dt.hour
-        baseline = pd.Series(
-            [self.hourly_stats.loc[h, "mean"] if h in self.hourly_stats.index else np.nan for h in hours],
-            index=full_signal.index
-        )
-        stds = pd.Series(
-            [self.hourly_stats.loc[h, "std"] if h in self.hourly_stats.index else np.nan for h in hours],
-            index=full_signal.index
-        )
+        if hasattr(full_timestamps, 'dt'):
+            hour_arr = full_timestamps.dt.hour.values
+        else:
+            hour_arr = full_timestamps.hour.values
 
+        mean_arr = self.hourly_stats["mean"].values
+        std_arr  = self.hourly_stats["std"].values
+
+        baseline_vals = mean_arr[hour_arr]
+        std_vals      = std_arr[hour_arr]
+
+        baseline = pd.Series(baseline_vals, index=full_signal.index)
+        stds     = pd.Series(std_vals,      index=full_signal.index)
         upper = baseline + num_std * stds
         lower = baseline - num_std * stds
 
-        return {"baseline": baseline, "upper": upper, "lower": lower,}
+        return {"baseline": baseline, "upper": upper, "lower": lower}
 
     def apply_state(self, full_flow, full_signal, num_std=3):
         if self.state_stats is None:
             raise ValueError("fit_state() not called")
 
-        states = pd.cut(full_flow, bins=self.state_bins, labels=["low", "mid", "high"])
-        baseline = pd.Series(
-            [self.state_stats.loc[s, "mean"] if s in self.state_stats.index else np.nan for s in states],
-            index=full_signal.index
-        )
-        stds = pd.Series(
-            [self.state_stats.loc[s, "std"] if s in self.state_stats.index else np.nan for s in states],
-            index=full_signal.index
-        )
+        state_labels = ["low", "mid", "high"]
+        states = pd.cut(full_flow, bins=self.state_bins, labels=state_labels)
 
+        mean_map = self.state_stats["mean"].to_dict()
+        std_map  = self.state_stats["std"].to_dict()
+
+        baseline_vals = states.map(mean_map).astype(float).values
+        std_vals      = states.map(std_map).astype(float).values
+
+        baseline = pd.Series(baseline_vals, index=full_signal.index)
+        stds     = pd.Series(std_vals,      index=full_signal.index)
         upper = baseline + num_std * stds
         lower = baseline - num_std * stds
 
-        return {"baseline": baseline, "upper": upper, "lower": lower,}
+        return {"baseline": baseline, "upper": upper, "lower": lower}
 
     def debug_summary(self, method_name):
         print(f"  === {method_name.upper()} ===")
