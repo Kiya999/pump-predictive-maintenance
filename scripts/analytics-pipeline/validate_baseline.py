@@ -13,6 +13,8 @@ WINDOW_HOURS = 24
 NUM_STD = 3
 SIGNAL_COLS = ["flow_m3h", "vibration_mm_s"]
 
+NEEDED_COLS = ["asset_id", "timestamp", "failure_type",
+               "flow_m3h", "vibration_mm_s"]
 script_dir = os.path.dirname(os.path.abspath(__file__))
 output_dir = os.path.join(script_dir, "output", "baseline_validation")
 os.makedirs(output_dir, exist_ok=True)
@@ -24,7 +26,7 @@ if not os.path.exists(db_path):
     sys.exit(1)
 
 engine = create_engine(f"sqlite:///{db_path}")
-df = pd.read_sql_table("historian_clean", engine)
+df = pd.read_sql_table("historian_clean", engine, columns=NEEDED_COLS)
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 df = df.sort_values("timestamp").reset_index(drop=True)
 
@@ -33,8 +35,6 @@ print(f"Columns: {list(df.columns)}")
 print(f"\nfailure_type unique values: {df['failure_type'].unique()}")
 print(f"failure_type value counts:\n{df['failure_type'].value_counts(dropna=False)}")
 print(f"Missing in failure_type: {df['failure_type'].isna().sum()}")
-
-healthy_values = {None, "none", "None", "pass", "", "N/A", "NA", np.nan}
 
 healthy_mask = df["failure_type"].isna() | df["failure_type"].isin(["none", "None", "pass", "", "N/A", "NA"])
 degrading_mask = ~healthy_mask
@@ -54,19 +54,11 @@ all_degrading_assets = df[degrading_mask]["asset_id"].unique()
 print(f"\nHealthy asset IDs: {all_healthy_assets}")
 print(f"Degrading asset IDs: {all_degrading_assets}")
 
-# Assets that are completely healthy:
-pure_healthy_assets = []
-for asset in all_healthy_assets:
-    asset_data = df[df["asset_id"] == asset]
-    if (asset_data["failure_type"] == "none").all():
-        pure_healthy_assets.append(asset)
+# Assets completely healthy
+pure_healthy_assets = [asset for asset in all_healthy_assets if (df[df["asset_id"] == asset]["failure_type"] == "none").all()]
 
 # Assets that have at least one failure:
-any_failure_assets = []
-for asset in all_degrading_assets:
-    asset_data = df[df["asset_id"] == asset]
-    if not (asset_data["failure_type"] == "none").all():
-        any_failure_assets.append(asset)
+any_failure_assets = [asset for asset in all_degrading_assets if not (df[df["asset_id"] == asset]["failure_type"] == "none").all()]
 
 if not pure_healthy_assets:
     print("Error: no asset with entirely normal operation found")
@@ -86,10 +78,10 @@ if healthy_asset == degrading_asset:
         sys.exit(1)
 
 # for healthy asset, keep only normal rows
-df_healthy = df[(df["asset_id"] == healthy_asset) & (df["failure_type"] == "none")].copy().reset_index(drop=True)
+df_healthy = df[(df["asset_id"] == healthy_asset) & (df["failure_type"] == "none")].reset_index(drop=True)
 
 # for degrading asset, keep all rows (including the failure period)
-df_degrading = df[df["asset_id"] == degrading_asset].copy().reset_index(drop=True)
+df_degrading = df[df["asset_id"] == degrading_asset].reset_index(drop=True)
 
 # Find first failure index in degrading asset
 degrading_failure_mask = df_degrading["failure_type"] != "none"
