@@ -15,3 +15,6 @@ scripts/analytics-pipeline/output/baseline_validation/P-0100_flow_m3h_degrading.
 scripts/analytics-pipeline/output/baseline_validation/P-0100_vibration_mm_s_degrading.html
 scripts/analytics-pipeline/output/baseline_validation/P-0200_flow_m3h_healthy.html
 scripts/analytics-pipeline/output/baseline_validation/P-0200_vibration_mm_s_healthy.html
+scripts/analytics-pipeline/output/anomaly_detection/bearing_P-0100.html
+scripts/analytics-pipeline/output/anomaly_detection/cavitation_P-0300.html
+scripts/analytics-pipeline/output/anomaly_detection/insulation_P-0500.html
