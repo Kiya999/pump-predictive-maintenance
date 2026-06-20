@@ -18,6 +18,8 @@ MA_THRESHOLD = 1.5
 IQR_WINDOW_PERIODS = 1440
 IQR_MULTIPLIER = 1.0
 
+NEEDED_COLS = ["asset_id", "timestamp", "failure_type",
+               "vibration_mm_s", "diff_pressure_bar", "motor_temp_c", "flow_m3h"]
 script_dir = os.path.dirname(os.path.abspath(__file__))
 output_dir = os.path.join(script_dir, "output", "anomaly_detection")
 os.makedirs(output_dir, exist_ok=True)
@@ -29,7 +31,7 @@ if not os.path.exists(db_path):
     sys.exit(1)
 
 engine = create_engine(f"sqlite:///{db_path}")
-df = pd.read_sql_table("historian_clean", engine)
+df = pd.read_sql_table("historian_clean", engine, columns=NEEDED_COLS)
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 df = df.sort_values("timestamp").reset_index(drop=True)
 
@@ -85,10 +87,9 @@ def debug_anomaly_results(method_name, result_dict, signal, pre_failure_idx, pos
             if lead_hours < 168:
                 print(f"      First flag: {lead_hours:.1f} hours BEFORE failure (index {first_flag})")
             else:
-                print(f"      First flag: {lead_days:.1f} days BEFORE failure (TOO EARLY - index {first_flag})")
+                print(f"      First flag: {lead_days:.1f} days BEFORE failure (index {first_flag})")
         else:
-            lag_samples = first_flag - pre_failure_idx
-            lag_hours = lag_samples / 60
+            lag_hours = (first_flag - pre_failure_idx) / 60
             print(f"      First flag: {lag_hours:.1f} hours AFTER failure (index {first_flag})")
     else:
         print(f"      First flag: no anomalies detected")
@@ -105,7 +106,7 @@ def detect_on_scenario(scenario_name, signal_col, failure_type):
     asset_id = all_rows_with_failure_type["asset_id"].iloc[0]
     print(f"    Asset ID: {asset_id}")
 
-    df_asset = df[df["asset_id"] == asset_id].copy().reset_index(drop=True)
+    df_asset = df[df["asset_id"] == asset_id].reset_index(drop=True)
     print(f"    Total rows for asset: {len(df_asset)}")
 
     if signal_col not in df_asset.columns:
@@ -115,10 +116,7 @@ def detect_on_scenario(scenario_name, signal_col, failure_type):
     signal = df_asset[signal_col].fillna(df_asset[signal_col].mean())
     flow = df_asset["flow_m3h"].fillna(df_asset["flow_m3h"].mean())
 
-    if df_asset["timestamp"].dtype != 'datetime64[ns]':
-        timestamps = pd.to_datetime(df_asset["timestamp"])
-    else:
-        timestamps = df_asset["timestamp"]
+    timestamps = pd.to_datetime(df_asset["timestamp"])
 
     print(f"    Signal {signal_col}: min={signal.min():.4f}, max={signal.max():.4f}, mean={signal.mean():.4f}")
 
@@ -150,7 +148,6 @@ def detect_on_scenario(scenario_name, signal_col, failure_type):
     calc.fit_hourly()
     calc.fit_state()
 
-    # baseline_result = calc.apply_rolling(signal, num_std=3)
     baseline_result = calc.apply_hourly(timestamps, signal, num_std=3)
 
     print("    Baseline computed")
@@ -180,26 +177,14 @@ def detect_on_scenario(scenario_name, signal_col, failure_type):
         vertical_spacing=0.08,
     )
 
-    fig.add_trace(
-        go.Scatter(x=timestamps, y=signal.values, mode="lines",
-                  name="Signal", line=dict(color="steelblue", width=1)),
-        row=1, col=1
-    )
-    fig.add_trace(
-        go.Scatter(x=timestamps, y=baseline_result["baseline"].values, mode="lines",
-                  name="Baseline", line=dict(color="red", width=2, dash="dash")),
-        row=1, col=1
-    )
-    fig.add_trace(
-        go.Scatter(x=timestamps, y=baseline_result["upper"].values, mode="lines",
-                  name="Upper limit", line=dict(color="orange", width=1, dash="dot")),
-        row=1, col=1
-    )
-    fig.add_trace(
-        go.Scatter(x=timestamps, y=baseline_result["lower"].values, mode="lines",
-                  name="Lower limit", line=dict(color="orange", width=1, dash="dot"), showlegend=True),
-        row=1, col=1
-    )
+    fig.add_trace(go.Scatter(x=timestamps, y=signal.values, mode="lines",
+                  name="Signal", line=dict(color="steelblue", width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=timestamps, y=baseline_result["baseline"].values, mode="lines",
+                  name="Baseline", line=dict(color="red", width=2, dash="dash")), row=1, col=1)
+    fig.add_trace(go.Scatter(x=timestamps, y=baseline_result["upper"].values, mode="lines",
+                  name="Upper limit", line=dict(color="orange", width=1, dash="dot")), row=1, col=1)
+    fig.add_trace(go.Scatter(x=timestamps, y=baseline_result["lower"].values, mode="lines",
+                  name="Lower limit", line=dict(color="orange", width=1, dash="dot"), showlegend=True), row=1, col=1)
 
     methods = [
         (2, "Z-score", zscore_result),
@@ -210,12 +195,9 @@ def detect_on_scenario(scenario_name, signal_col, failure_type):
     for row, method_name, result in methods:
         flag_indices = result.get("flag_indices", np.where(result["flag"])[0])
 
-        fig.add_trace(
-            go.Scatter(x=timestamps, y=result["severity"], mode="lines",
+        fig.add_trace(go.Scatter(x=timestamps, y=result["severity"], mode="lines",
                       line=dict(color="gray", width=1), name=f"{method_name} severity",
-                      showlegend=False),
-            row=row, col=1
-        )
+                      showlegend=False), row=row, col=1)
 
         if len(flag_indices) > 0:
             flagged_x = timestamps.values[flag_indices]
