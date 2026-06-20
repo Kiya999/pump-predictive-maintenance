@@ -1,6 +1,7 @@
 # anomaly_detection.py
 import pandas as pd
 import numpy as np
+import pymannkendall as mk
 
 
 class AnomalyDetector:
@@ -9,7 +10,7 @@ class AnomalyDetector:
         self.baseline = baseline_results["baseline"]
         self.upper = baseline_results["upper"]
         self.lower = baseline_results["lower"]
-        self.std = (self.upper - self.baseline) / 3.0 # inherited from baseline (num_std=3)
+        self.std = (self.upper - self.baseline) / 3.0
 
     def zscore(self, signal, threshold):
         deviation = (signal - self.baseline) / (self.std + 1e-8)
@@ -29,15 +30,13 @@ class AnomalyDetector:
         upper_fence = q3_baseline + multiplier * iqr_baseline
 
         flag = (signal < lower_fence) | (signal > upper_fence)
+        severity = np.abs(signal - self.baseline) / (self.std + 1e-8)
 
-        severity = np.zeros(len(signal))
-        for i in range(len(signal)):
-            std_val = self.std.iloc[i] if self.std.iloc[i] > 0 else 1.0
-            severity[i] = np.abs(signal.iloc[i] - self.baseline.iloc[i]) / (std_val + 1e-8)
+        del q1_baseline, q3_baseline, iqr_baseline, lower_fence, upper_fence
 
         return {
             "flag": pd.Series(flag.values, index=signal.index),
-            "severity": pd.Series(severity, index=signal.index),
+            "severity": pd.Series(severity.values, index=signal.index),
         }
 
     def moving_average(self, signal, window_periods, threshold):
@@ -56,26 +55,14 @@ class AnomalyDetector:
             flag_series = pd.Series(flag_series)
 
         window_size = int(min_duration_hours * 60 / sampling_freq_minutes)
-        if window_size < 1:
-            window_size = 1
+        rolling_persistence = flag_series.rolling(window=window_size).mean()
+        persistent_positions = np.where(rolling_persistence.values >= persistence_threshold)[0]
 
-        if len(flag_series) < window_size:
+        if len(persistent_positions) == 0:
             return None, []
 
-        persistence_windows = []
-
-        for i in range(len(flag_series) - window_size + 1):
-            window = flag_series.iloc[i:i+window_size]
-            persistence = window.sum() / len(window)
-
-            if persistence >= persistence_threshold:
-                persistence_windows.append((i, i+window_size, float(persistence)))
-
-        if len(persistence_windows) == 0:
-            return None, []
-
-        first_persistent_idx = persistence_windows[0][0]
-        return first_persistent_idx, persistence_windows
+        first_detection_idx = persistent_positions[0]
+        return first_detection_idx, []
 
     @staticmethod
     def lead_time_hours(first_flag_idx, failure_idx, sampling_freq_minutes=1):
@@ -87,14 +74,12 @@ class AnomalyDetector:
         return hours_before
 
     @staticmethod
-    def detect_trend(signal, window_hours=72, alpha=0.05):
-        if mk is None:
-            return 'unknown', None, None, False
-
+    def detect_trend(signal, window_hours=72, sampling_freq_minutes=1, alpha=0.05):
         if not isinstance(signal, pd.Series):
             signal = pd.Series(signal)
 
-        window_size = int(window_hours * 60)
+        window_size = int(window_hours * 60 / sampling_freq_minutes)
+
         if len(signal) < window_size:
             return 'insufficient_data', 1.0, None, False
 
@@ -103,14 +88,12 @@ class AnomalyDetector:
         try:
             result = mk.original_test(recent_window)
         except Exception as e:
+            print(f"Warning: Mann-Kendall error: {e}")
             return 'error', None, None, False
 
-        p_value = result.p
-        statistic = result.slope  # [verify] Sen's slope estimator
-
-        significant = p_value < alpha
+        significant = result.p < alpha
         trend_direction = 'stable'
         if significant:
-            trend_direction = 'up' if statistic > 0 else 'down'
+            trend_direction = 'up' if result.slope > 0 else 'down'
 
-        return trend_direction, p_value, statistic, significant
+        return trend_direction, result.p, result.slope, significant
