@@ -1,0 +1,34 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="4zr9SILoIUnSNajR17mn">
+    <mxGraphModel dx="1082" dy="591" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="AprAXPRt3eKi3JMjxoJb-7" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;Shows interactive plots for frequency, severity and chattering&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;User should be able to select asset, method for analysis.&amp;nbsp;&amp;nbsp;" vertex="1">
+          <mxGeometry height="200" width="210" x="180" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="AprAXPRt3eKi3JMjxoJb-8" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;Shows precipitation and seasonal bands&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;User should be able to select date range.&amp;nbsp;&amp;nbsp;" vertex="1">
+          <mxGeometry height="200" width="210" x="400" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="AprAXPRt3eKi3JMjxoJb-6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Shows time series interactive plots&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;User should be able to select asset, signal, date range.&amp;nbsp;&amp;nbsp;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="200" width="210" x="400" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="AprAXPRt3eKi3JMjxoJb-5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="A table of all assets and their status" vertex="1">
+          <mxGeometry height="200" width="210" x="180" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="AprAXPRt3eKi3JMjxoJb-1" parent="1" style="whiteSpace=wrap;html=1;" value="Asset Overview" vertex="1">
+          <mxGeometry height="20" width="190" x="190" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="AprAXPRt3eKi3JMjxoJb-2" parent="1" style="whiteSpace=wrap;html=1;" value="Historian Trends" vertex="1">
+          <mxGeometry height="20" width="190" x="410" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="AprAXPRt3eKi3JMjxoJb-3" parent="1" style="whiteSpace=wrap;html=1;" value="Alarm Analysis" vertex="1">
+          <mxGeometry height="20" width="190" x="190" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="AprAXPRt3eKi3JMjxoJb-4" parent="1" style="whiteSpace=wrap;html=1;" value="Environmental Context" vertex="1">
+          <mxGeometry height="20" width="190" x="410" y="260" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
