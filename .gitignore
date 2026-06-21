@@ -18,3 +18,5 @@ scripts/analytics-pipeline/output/baseline_validation/P-0200_vibration_mm_s_heal
 scripts/analytics-pipeline/output/anomaly_detection/bearing_P-0100.html
 scripts/analytics-pipeline/output/anomaly_detection/cavitation_P-0300.html
 scripts/analytics-pipeline/output/anomaly_detection/insulation_P-0500.html
+scripts/analytics-pipeline/output/detection_performance/trend_detection/bearing_trend_168h.html
+scripts/analytics-pipeline/output/detection_performance/trend_detection/bearing_trend_72h.html
