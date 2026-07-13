@@ -1,0 +1,11 @@
+alarm_tag,alarm_description,count,avg_priority
+P-0100.TI_HI,Motor temperature high,2461,2.0
+P-0100.VI_HI,Pump vibration high,2381,2.0
+P-0500.TI_HI,Motor temperature high,1204,2.0
+P-0500.II_HI,Motor current high,1132,2.0
+P-0300.PI_LO,Suction pressure low,480,2.0
+P-0300.PDI_HI,Differential pressure high,480,3.0
+P-0300.PI_HI,Discharge pressure high,453,3.0
+P-0300.FI_LO,Discharge flow low,451,3.0
+P-0700.SI_LO,Speed low,325,4.0
+P-0400.PI_HI,Discharge pressure high,305,3.0

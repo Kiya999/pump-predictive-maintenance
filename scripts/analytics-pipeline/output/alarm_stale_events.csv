@@ -1,0 +1,2 @@
+asset_id,alarm_tag,timestamp,clear_time,active_hours,stale_reason
+P-0200,P-0200.FI_LO,2025-01-11 02:00:00,,8517.854444444445,never_cleared
