@@ -29,8 +29,9 @@ def set_engine(engine):
     Input("date-range-picker", "start_date"),
     Input("date-range-picker", "end_date"),
     Input("env-layer-toggle", "value"),
+    Input("subsample-toggle", "value"),
 )
-def update_environmental_chart(asset_id, start_date, end_date, show_env):
+def update_environmental_chart(asset_id, start_date, end_date, show_env, subsample_on):
     if _engine is None:
         fig = go.Figure()
         fig.add_annotation(text="Database not connected")
@@ -48,26 +49,34 @@ def update_environmental_chart(asset_id, start_date, end_date, show_env):
         AND timestamp BETWEEN '{start_date}' AND '{end_date}'
         ORDER BY timestamp
         """
-        hist_df = pd.read_sql(query_hist, _engine, parse_dates=["timestamp"])
 
-        if len(hist_df) == 0:
+        hist_df_raw = pd.read_sql(query_hist, _engine, parse_dates=["timestamp"])
+        
+        if len(hist_df_raw) == 0:
             fig = go.Figure()
             fig.add_annotation(text=f"No data for {asset_id}")
             return fig, "--", f"No data for {asset_id}", "", {"display": "none"}
-
+        
         query_env = f"""
         SELECT timestamp, discharge_cfs
         FROM environmental_clean
         WHERE timestamp BETWEEN '{start_date}' AND '{end_date}'
         ORDER BY timestamp
         """
-        env_df = pd.read_sql(query_env, _engine, parse_dates=["timestamp"])
+        env_df_raw = pd.read_sql(query_env, _engine, parse_dates=["timestamp"])
 
         overlap_info = compute_overlap_correlation(
-            hist_df, env_df,
+            hist_df_raw, env_df_raw,
             hist_col="flow_m3h",
             env_col="discharge_cfs"
         )
+
+        if "on" in subsample_on:
+            hist_df = hist_df_raw.set_index("timestamp").resample("30min").mean().reset_index()
+            env_df = env_df_raw.set_index("timestamp").resample("30min").mean().reset_index()
+        else:
+            hist_df = hist_df_raw
+            env_df = env_df_raw
 
         corr_str = overlap_info["correlation_str"]
         message = overlap_info["message"]
@@ -102,8 +111,10 @@ def update_environmental_chart(asset_id, start_date, end_date, show_env):
                 )
             )
 
+        subsample_label = "(30-min avg)" if "on" in subsample_on else "(1-min raw)"
+
         fig.update_layout(
-            title=f"Environmental Context - {asset_id}",
+            title=f"Environmental Context - {asset_id} {subsample_label}",
             xaxis_title="Timestamp",
             yaxis_title="Flow (m3/h)",
             yaxis=dict(title=dict(text="Flow (m3/h)", font=dict(color="#3498db")), tickfont=dict(color="#3498db"),

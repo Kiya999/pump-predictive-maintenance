@@ -1,7 +1,6 @@
 # environmental_panel.py
 from dash import html, dcc
 
-
 def create_environmental_panel():
     return html.Div([
         html.H2("Environmental Context", style={"marginTop": 20}),
@@ -69,5 +68,3 @@ def create_environmental_panel():
         "borderRadius": "8px",
         "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
     })
-            
-            
