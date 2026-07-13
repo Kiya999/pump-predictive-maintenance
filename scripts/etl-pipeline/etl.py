@@ -136,6 +136,15 @@ def add_quality_flags(df, quality_report_path):
     df = df.copy()
     df["quality_flag"] = "pass"
 
+    # Columns that can be NULL without signaling a data quality issue
+    OPTIONAL_COLUMNS = {
+        "is_test_case",# Metadata: only populated for test alarms
+        "ack_time", # Conditional: NULL if alarm not yet acknowledged
+        "clear_time", # Conditional: NULL if alarm still active
+        "failure_type", # Metadata: only populated when failure injected
+        "operator_id", # Metadata: may be NULL for automated alarms
+    }
+
     if not os.path.exists(quality_report_path):
         logger.warning(f"Quality report not found: {quality_report_path}")
         return df
@@ -144,6 +153,10 @@ def add_quality_flags(df, quality_report_path):
         report = json.load(f)
 
     for col, col_info in report.get("completeness", {}).get("per_column", {}).items():
+        if col in OPTIONAL_COLUMNS:
+            logger.debug(f"Skipping quality check for optional column: {col}")
+            continue
+
         if col_info.get("missing_count", 0) > 0 and col in df.columns:
             df.loc[df[col].isna(), "quality_flag"] = "missing"
             logger.info(f"Flagged {df['quality_flag'].eq('missing').sum()} rows as missing in {col}")
@@ -206,7 +219,7 @@ def transform_historian(df_raw, config):
         if null_mask.any():
             df.loc[null_mask, 'quality_flag'] = 'missing'
             logger.info(f"Flagged {null_mask.sum()} rows as missing for {col} after resampling")
-            
+
     logger.info(f"Historian transform complete: {len(df)} rows")
     return df
 
@@ -231,7 +244,7 @@ def transform_alarm_log(df_raw, config):
         if null_mask.any():
             df.loc[null_mask, 'quality_flag'] = 'missing'
             logger.info(f"Flagged {null_mask.sum()} rows as missing for {col} after resampling")
-            
+
     logger.info(f"Alarm log transform complete: {len(df)} rows")
     return df
 
@@ -294,6 +307,8 @@ def create_database_schema(engine):
         Column('alarm_description', String(256)),
         Column('alarm_type', String(20)),
         Column('priority', Integer),
+        Column('ack_time', DateTime),
+        Column('clear_time', DateTime),
         Column('duration_min', Float),
         Column('area', String(100)),
         Column('operator_id', String(20)),

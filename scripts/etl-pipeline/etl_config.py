@@ -51,6 +51,8 @@ CONFIG = {
         },
         "alarm_log": {
             "activation_time": "timestamp",
+            "ack_time": "ack_time",
+            "clear_time": "clear_time",
             "asset_id": "asset_id",
             "alarm_tag": "alarm_tag",
             "alarm_description": "alarm_description",
