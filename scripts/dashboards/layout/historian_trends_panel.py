@@ -1,5 +1,5 @@
+# historian_trends_panel.py
 from dash import html
-
 
 def create_historian_trends_panel():
     return html.Div([
@@ -12,7 +12,7 @@ def create_historian_trends_panel():
 
     ], style={
         "flex": 1,
-        "minwidth": 0,
+        "minWidth": 0,
         "padding": "20px",
         "backgroundColor": "#ffffff",
         "borderRadius": "8px",
