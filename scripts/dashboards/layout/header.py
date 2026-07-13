@@ -39,11 +39,22 @@ def create_header():
                 html.Label("Date Range:", style={"fontWeight": "bold"}),
                 dcc.DatePickerRange(
                     id="date-range-picker",
-                    start_date="2025-01-01",
-                    end_date="2025-12-31",
+                    start_date="2025-07-21",
+                    end_date="2025-07-31",
                     display_format="YYYY-MM-DD"
                 ),
-            ], style={"flex": 2}),
+            ], style={"flex": 1, "marginRight": 30}),
+
+            html.Div([
+                dcc.Checklist(
+                    id="subsample-toggle",
+                    options=[{"label": " Subsample data", "value": "on"}],
+                    value=["on"],
+                    style={"display": "inline-block"}
+                ),
+            ], style={"flex": 1, "marginRight": 0}),
+
+            
         ], style={
             "display": "flex",
             "gap": 10,
