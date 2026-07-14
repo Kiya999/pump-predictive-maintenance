@@ -19,6 +19,12 @@ PF_INTERVALS_HOURS = {
     "insulation": 120 * 24,
 }
 
+RAMP_INFO_DAYS = {
+    "bearing": {"start_day": 100, "ramp_days": 260},
+    "cavitation": {"start_day": 200, "ramp_days": 60},
+    "insulation": {"start_day": 150, "ramp_days": 120},
+}
+
 FAILURE_SCENARIOS = [
     ("bearing", "vibration_mm_s", "bearing"),
     ("cavitation", "diff_pressure_bar", "cavitation"),
@@ -114,16 +120,32 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
         print("  Skip: no failure point found")
         continue
 
-    failure_idx = failure_mask.idxmax()
-    print(f"  Failure index: {failure_idx} ({100.0*failure_idx/len(df_asset):.1f}% into timeline)")
+    onset_idx = failure_mask.idxmax()
+
+    ramp_info = RAMP_INFO_DAYS.get(failure_type)
+    if ramp_info is None:
+        print(f"  Skip: no ramp info for '{failure_type}'")
+        continue
+
+    true_failure_day = ramp_info["start_day"] + ramp_info["ramp_days"]
+    true_failure_ts = df_asset["timestamp"].iloc[0] + pd.Timedelta(days=true_failure_day)
+    post_true_failure = df_asset["timestamp"] >= true_failure_ts
+    if not post_true_failure.any():
+        print(f"  Skip: ramp end (day {true_failure_day}) beyond available data")
+        continue
+
+    failure_idx = post_true_failure.idxmax()
+
+    print(f"  Ramp onset index: {onset_idx} ({100.0*onset_idx/len(df_asset):.1f}% into timeline)")
+    print(f"  True failure index (ramp end): {failure_idx} ({100.0*failure_idx/len(df_asset):.1f}% into timeline)")
 
     signal = df_asset[signal_col].fillna(df_asset[signal_col].mean())
     flow = df_asset["flow_m3h"].fillna(df_asset["flow_m3h"].mean())
     timestamps = df_asset["timestamp"]
 
-    train_signal = signal.iloc[:failure_idx]
-    train_flow = flow.iloc[:failure_idx]
-    train_ts = timestamps.iloc[:failure_idx]
+    train_signal = signal.iloc[:onset_idx]
+    train_flow = flow.iloc[:onset_idx]
+    train_ts = timestamps.iloc[:onset_idx]
 
     if len(train_signal) < 1440:
         print(f"  Skip: insufficient training data ({len(train_signal)} < 1440)")
@@ -153,17 +175,21 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
 
     for method_name, result in detection_results.items():
         flags = result["flag"]
+        flags_post_onset = flags.iloc[onset_idx:]
 
-        first_persistent, _ = AnomalyDetector.persistent_detection(
-            flags.values,
+        first_persistent_rel, _ = AnomalyDetector.persistent_detection(
+            flags_post_onset.values,
             min_duration_hours=PERSISTENCE_MIN_DURATION_HOURS,
             persistence_threshold=PERSISTENCE_THRESHOLD,
             sampling_freq_minutes=SAMPLING_FREQ_MINUTES,
         )
+        first_persistent = (onset_idx + first_persistent_rel) if first_persistent_rel is not None else None
 
         if first_persistent is not None and first_persistent < failure_idx:
-            if method_name == "IQR":
+            # This preserves IQR as the preferred anchor when it fires, but lets Z-score populate the dict when IQR doesn't
+            if scenario_name not in first_detection_indices or method_name == "IQR":
                 first_detection_indices[scenario_name] = first_persistent
+
 
             lead_hours = AnomalyDetector.lead_time_hours(first_persistent, failure_idx, sampling_freq_minutes=1)
             lead_pct = 100.0 * lead_hours / pf_hours if pf_hours else None
@@ -437,11 +463,26 @@ else:
         signal = df_bearing["vibration_mm_s"].fillna(df_bearing["vibration_mm_s"].mean())
         timestamps = df_bearing["timestamp"]
 
+        # Find onset (first non-none)
         failure_mask_b = df_bearing["failure_type"] != "none"
         if not failure_mask_b.any():
             print("Warning: no failure point in bearing asset")
         else:
-            failure_idx = failure_mask_b.idxmax()
+            onset_idx = failure_mask_b.idxmax()
+
+            # Calculate true failure (ramp end) same as Part 1
+            ramp_info = RAMP_INFO_DAYS.get("bearing")
+            if ramp_info is None:
+                print("Warning: no ramp info for bearing, skipping trend analysis")
+            else:
+                true_failure_day = ramp_info["start_day"] + ramp_info["ramp_days"]
+                true_failure_ts = df_bearing["timestamp"].iloc[0] + pd.Timedelta(days=true_failure_day)
+                post_true_failure = df_bearing["timestamp"] >= true_failure_ts
+                if not post_true_failure.any():
+                    print("Warning: ramp end beyond available data, skipping trend analysis")
+                else:
+                    failure_idx = post_true_failure.idxmax()
+
             failure_time = timestamps.iloc[failure_idx]
             # failure_time_str = failure_time.isoformat()
             failure_pct = 100.0 * failure_idx / len(df_bearing)
@@ -532,13 +573,14 @@ else:
                     zscore_flags = zscore_result["flag"]
                     iqr_flags = iqr_result["flag"]
 
-                    # Find first persistent detection
-                    first_iqr, _ = AnomalyDetector.persistent_detection(
-                        iqr_flags.values, min_duration_hours=PERSISTENCE_MIN_DURATION_HOURS,
+                    # Find first persistent IQR detection post-failure (avoid pre-failure spurious flags)
+                    iqr_flags_post_failure = iqr_flags.iloc[failure_idx:]
+                    first_iqr_rel, _ = AnomalyDetector.persistent_detection(
+                        iqr_flags_post_failure.values, min_duration_hours=PERSISTENCE_MIN_DURATION_HOURS,
                         persistence_threshold=PERSISTENCE_THRESHOLD, sampling_freq_minutes=SAMPLING_FREQ_MINUTES
                     )
-
-                    first_iqr_time = timestamps.iloc[first_iqr] if first_iqr and first_iqr < failure_idx else None
+                    first_iqr = (failure_idx + first_iqr_rel) if first_iqr_rel is not None else None
+                    first_iqr_time = timestamps.iloc[first_iqr] if first_iqr is not None else None
 
                     has_flags = True
 

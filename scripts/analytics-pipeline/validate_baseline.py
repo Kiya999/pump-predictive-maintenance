@@ -1,7 +1,6 @@
 # validate_baseline.py
 import os
 import sys
-import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine
 import plotly.graph_objects as go

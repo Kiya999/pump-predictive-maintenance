@@ -22,22 +22,24 @@ class AnomalyDetector:
         }
 
     def iqr(self, signal, window_periods, multiplier):
-        q1_baseline = self.baseline.rolling(window=window_periods, center=False).quantile(0.25)
-        q3_baseline = self.baseline.rolling(window=window_periods, center=False).quantile(0.75)
-        iqr_baseline = q3_baseline - q1_baseline
+        residual = signal - self.baseline
+        q1 = residual.rolling(window=window_periods, center=False).quantile(0.25)
+        q3 = residual.rolling(window=window_periods, center=False).quantile(0.75)
+        iqr_val = q3 - q1
 
-        lower_fence = q1_baseline - multiplier * iqr_baseline
-        upper_fence = q3_baseline + multiplier * iqr_baseline
+        lower_fence = q1 - multiplier * iqr_val
+        upper_fence = q3 + multiplier * iqr_val
 
-        flag = (signal < lower_fence) | (signal > upper_fence)
-        severity = np.abs(signal - self.baseline) / (self.std + 1e-8)
+        flag = (residual < lower_fence) | (residual > upper_fence)
+        severity = residual.abs() / (self.std + 1e-8)
 
-        del q1_baseline, q3_baseline, iqr_baseline, lower_fence, upper_fence
+        del q1, q3, iqr_val, lower_fence, upper_fence
 
         return {
             "flag": pd.Series(flag.values, index=signal.index),
             "severity": pd.Series(severity.values, index=signal.index),
         }
+
 
     def moving_average(self, signal, window_periods, threshold):
         ma = signal.rolling(window=window_periods, center=False).mean()

@@ -1,4 +1,4 @@
 Window hours,Window type,Trend direction,P-value,Slope,Significant (alpha=0.05)
-111.6,full (capped),stable,0.32419809433903635,0.0,False
-72.0,trailing,stable,0.9254015520396552,0.0,False
-168.0,trailing,stable,0.47323438858095157,0.0,False
+166.66666666666666,full (capped),up,0.0,3.2232070910556034e-07,True
+72.0,trailing,up,0.0006153025757844599,3.8505968425105924e-07,True
+168.0,trailing,up,0.0,3.470213996529725e-07,True
