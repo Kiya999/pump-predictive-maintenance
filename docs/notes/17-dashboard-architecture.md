@@ -14,13 +14,13 @@ Week 1 evaluation compared Streamlit and Dash; both suitable for mixed-operation
 
 ## 2. Panel Layout
 
-![Dashboard outline](../diagrams/dashboard_outline.png)
+![Dashboard outline (first design)](../diagrams/dashboard_outline.png)
 
 Panel | Purpose | Inputs | Outputs
 --- | --- | --- | ---
 1: Asset Overview | Health status of 10 assets | None (static on load) | RAG indicators per asset
-2: Historian Trends | Time series with baseline and anomaly flags | Asset selector, signal selector, date range | Line chart with overlays
-3: Alarm Analysis | Anomaly flag frequency, severity, and chattering | Asset selector, method selector | Bar chart (frequency), histogram (severity), line chart (flag count over time)
+2: Historian Trends | Time series with baseline and anomaly flags | Asset selector, date range, subsample toggle | 4-subplot line charts with baseline overlay and IQR flags
+3: Alarm Analysis | Alarm frequency, priority breakdown, and trends | Asset selector, date range, subsample toggle | Bar chart (top 10 by frequency), donut chart (critical vs. nuisance by priority), line chart (daily count trend), sortable DataTable (individual events)
 4: Environmental Context | Precipitation and seasonal bands | Date range | Time series overlay
 
 ---
