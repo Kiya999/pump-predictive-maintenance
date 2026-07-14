@@ -44,7 +44,7 @@ def create_environmental_panel():
             "border": "1px solid #bdc3c7"
         }),
 
-        dcc.Graph(id="env-overlay-chart", style={"height": "500px"}),
+        dcc.Graph(id="env-overlay-chart", style={"height": "450px"}),
 
         html.Div(
             id="env-data-alert",

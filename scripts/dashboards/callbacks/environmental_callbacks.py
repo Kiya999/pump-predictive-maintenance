@@ -51,12 +51,12 @@ def update_environmental_chart(asset_id, start_date, end_date, show_env, subsamp
         """
 
         hist_df_raw = pd.read_sql(query_hist, _engine, parse_dates=["timestamp"])
-        
+
         if len(hist_df_raw) == 0:
             fig = go.Figure()
             fig.add_annotation(text=f"No data for {asset_id}")
             return fig, "--", f"No data for {asset_id}", "", {"display": "none"}
-        
+
         query_env = f"""
         SELECT timestamp, discharge_cfs
         FROM environmental_clean

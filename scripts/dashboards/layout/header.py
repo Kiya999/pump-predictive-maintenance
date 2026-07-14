@@ -17,53 +17,56 @@ engine.dispose()
 
 def create_header():
     return html.Div([
-        html.H1("Pump and Motor Monitoring Dashboard",
-                style={"textAlign": "center", "marginTop": 20, "marginBottom": 5}),
-        html.P("10 assets, 365 days, 1-minute resolution",
-               style={"textAlign": "center", "color": "#7f8c8d", "marginBottom": 20}),
-
-        html.Hr(style={"borderColor": "#bdc3c7"}),
-
         html.Div([
-            html.Div([
-                html.Label("Asset:", style={"fontWeight": "bold"}),
-                dcc.Dropdown(
-                    id="asset-selector",
-                    options=ASSET_OPTIONS,
-                    value=ASSET_OPTIONS[0]["value"] if ASSET_OPTIONS else None,
-                    clearable=False
-                ),
-            ], style={"flex": 1, "marginRight": 15}),
+            html.H1("Pump and Motor Monitoring Dashboard",
+                    style={"textAlign": "center", "marginTop": 0, "marginBottom": 5}),
+            html.P("10 assets, 365 days, 1-minute resolution",
+                   style={"textAlign": "center", "color": "#7f8c8d", "marginBottom": 20}),
+
+            html.Hr(style={"borderColor": "#bdc3c7"}),
+
+            dcc.Dropdown(
+                id="asset-selector",
+                options=ASSET_OPTIONS,
+                value=ASSET_OPTIONS[0]["value"] if ASSET_OPTIONS else None,
+                clearable=False,
+                style={"display": "none"}
+            ),
 
             html.Div([
-                html.Label("Date Range:", style={"fontWeight": "bold"}),
-                dcc.DatePickerRange(
-                    id="date-range-picker",
-                    start_date="2025-07-21",
-                    end_date="2025-07-31",
-                    display_format="YYYY-MM-DD"
-                ),
-            ], style={"flex": 1, "marginRight": 30}),
 
-            html.Div([
-                dcc.Checklist(
-                    id="subsample-toggle",
-                    options=[{"label": " Subsample data", "value": "on"}],
-                    value=["on"],
-                    style={"display": "inline-block"}
-                ),
-            ], style={"flex": 1, "marginRight": 0}),
+                html.Div([
+                    html.Label("Date Range:", style={"fontWeight": "bold"}),
+                    dcc.DatePickerRange(
+                        id="date-range-picker",
+                        start_date="2025-07-21",
+                        end_date="2025-07-31",
+                        display_format="YYYY-MM-DD"
+                    ),
+                ], style={"flex": 1, "marginRight": 30}),
 
-            
+                html.Div([
+                    dcc.Checklist(
+                        id="subsample-toggle",
+                        options=[{"label": " Subsample data", "value": "on"}],
+                        value=["on"],
+                        style={"display": "inline-block"}
+                    ),
+                ], style={"flex": 1, "marginRight": 0}),
+
+            ], style={
+                "display": "flex",
+                "gap": 10,
+                "padding": "15px",
+                "backgroundColor": "#ffffff",
+                "borderRadius": "8px",
+                "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
+            }),
+
         ], style={
-            "display": "flex",
-            "gap": 10,
-            "padding": "15px",
-            "backgroundColor": "#ffffff",
-            "borderRadius": "8px",
-            "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-            "marginLeft": "20px",
-            "marginRight": "20px",
+            "maxWidth": 1800,
+            "margin": "0 auto",
+            "padding": "20px",
         }),
 
-    ], style={"backgroundColor": "#ecf0f1", "paddingBottom": 10})
+    ], style={"backgroundColor": "#ecf0f1"})

@@ -1,114 +1,142 @@
 # asset_overview_callbacks.py
-from dash import callback, Input, Output
+from dash import callback, Input, Output, ALL, ctx, no_update, html
 import pandas as pd
 
 _engine = None
+
 
 def set_engine(engine):
     global _engine
     _engine = engine
 
+
+def _health_color(anomaly_pct, alarm_count):
+    if anomaly_pct > 10.0 or alarm_count >= 15:
+        return "#e74c3c", "At Risk"
+    if anomaly_pct > 2.0 or alarm_count >= 5:
+        return "#f39c12", "Caution"
+    return "#27ae60", "Healthy"
+
+
 @callback(
     Output("asset-overview-content", "children"),
-    Input("asset-selector", "value"),
     Input("date-range-picker", "start_date"),
     Input("date-range-picker", "end_date"),
+    Input("asset-selector", "value"),
 )
-def update_asset_overview(asset_id, start_date, end_date):
-    from dash import html
-    
-    if _engine is None or not asset_id:
-        return html.Div("No data")
-    
+def update_asset_overview(start_date, end_date, selected_asset):
+
+    if _engine is None:
+        return html.Div("No database connection")
+
     try:
         query_hist = f"""
-        SELECT 
+        SELECT asset_id,
             COUNT(*) as total_rows,
-            SUM(CASE WHEN failure_type = 'none' THEN 1 ELSE 0 END) as normal_count,
             SUM(CASE WHEN failure_type != 'none' THEN 1 ELSE 0 END) as anomaly_count,
             AVG(vibration_mm_s) as avg_vib,
             AVG(motor_temp_c) as avg_temp
         FROM historian_clean
-        WHERE asset_id = '{asset_id}'
-        AND timestamp BETWEEN '{start_date}' AND '{end_date}'
+        WHERE timestamp BETWEEN '{start_date}' AND '{end_date}'
+        GROUP BY asset_id
+        ORDER BY asset_id
         """
         hist_df = pd.read_sql(query_hist, _engine)
-        
+
         query_alarms = f"""
-        SELECT COUNT(*) as alarm_count
+        SELECT asset_id, COUNT(*) as alarm_count
         FROM alarm_log_clean
-        WHERE asset_id = '{asset_id}'
-        AND timestamp >= datetime('{end_date}', '-1 day')
+        WHERE timestamp >= datetime('{end_date}', '-1 day')
+        AND timestamp <= '{end_date}'
+        GROUP BY asset_id
         """
-        alarms_df = pd.read_sql(query_alarms, _engine)
-        alarm_count = alarms_df["alarm_count"].iloc[0]
-        
-        total_rows = hist_df["total_rows"].iloc[0]
-        runtime_hours = total_rows / 60.0
-        avg_vib = hist_df["avg_vib"].iloc[0]
-        avg_temp = hist_df["avg_temp"].iloc[0]
-        anomaly_count = hist_df["anomaly_count"].iloc[0]
-        
-        if avg_vib is None:
-            avg_vib = 0
-        if avg_temp is None:
-            avg_temp = 0
-        if anomaly_count is None:
-            anomaly_count = 0
-        
-        anomaly_pct = 100.0 * anomaly_count / total_rows if total_rows > 0 else 0
-        
-        if anomaly_pct > 10.0:
-            health = "#e74c3c"
-            status = "At Risk"
-        elif anomaly_pct > 2.0:
-            health = "#f39c12"
-            status = "Caution"
-        else:
-            health = "#27ae60"
-            status = "Healthy"
-        
-        content = html.Div([
-            html.Div([
-                html.Div([
-                    html.Div(status, style={"fontSize": 18, "fontWeight": "bold"}),
-                    html.Div(f"Anomalies: {anomaly_pct:.2f}%", style={"fontSize": 12, "color": "#ecf0f1"}),
-                ], style={
-                    "padding": 15,
-                    "backgroundColor": health,
-                    "color": "white",
-                    "borderRadius": 5,
-                    "marginBottom": 10
-                }),
-                
-                html.Div([
-                    html.Span("Runtime: ", style={"fontWeight": "bold"}),
-                    html.Span(f"{runtime_hours:.0f} hours"),
-                ], style={"marginBottom": 8}),
-                
-                html.Div([
-                    html.Span("Avg Vibration: ", style={"fontWeight": "bold"}),
-                    html.Span(f"{avg_vib:.4f} mm/s"),
-                ], style={"marginBottom": 8}),
-                
-                html.Div([
-                    html.Span("Avg Temperature: ", style={"fontWeight": "bold"}),
-                    html.Span(f"{avg_temp:.1f}°C"),
-                ], style={"marginBottom": 8}),
-                
-                html.Div([
-                    html.Span("Alarms (24h): ", style={"fontWeight": "bold"}),
-                    html.Span(str(alarm_count)),
-                ], style={"marginBottom": 8}),
-                
-                html.Div([
-                    html.Span("Anomalies: ", style={"fontWeight": "bold"}),
-                    html.Span(f"{anomaly_pct:.2f}%"),
-                ], style={"fontSize": 12, "color": "#7f8c8d"}),
-            ], style={"fontSize": 13})
-        ])
-        
-        return content
-        
+        alarm_df = pd.read_sql(query_alarms, _engine)
+
+        query_recent_failure = f"""
+        SELECT asset_id, failure_type FROM (
+            SELECT asset_id, failure_type, timestamp,
+                ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY timestamp DESC) as rn
+            FROM historian_clean
+            WHERE failure_type != 'none'
+            AND timestamp BETWEEN '{start_date}' AND '{end_date}'
+        ) WHERE rn = 1
+        """
+        recent_df = pd.read_sql(query_recent_failure, _engine)
+
+        merged = hist_df.merge(alarm_df, on="asset_id", how="left")
+        merged = merged.merge(recent_df, on="asset_id", how="left", suffixes=("", "_recent"))
+        merged["alarm_count"] = merged["alarm_count"].fillna(0).astype(int)
+        merged["failure_type"] = merged["failure_type"].fillna("none")
+
+        cards = []
+        for _, row in merged.iterrows():
+            asset_id = row["asset_id"]
+            total_rows = row["total_rows"]
+            anomaly_pct = 100.0 * row["anomaly_count"] / total_rows if total_rows > 0 else 0
+            runtime_hours = total_rows / 60.0
+            avg_vib = row["avg_vib"] if pd.notna(row["avg_vib"]) else 0
+            avg_temp = row["avg_temp"] if pd.notna(row["avg_temp"]) else 0
+            alarm_count = row["alarm_count"]
+            recent_flag = row["failure_type"]
+
+            color, status = _health_color(anomaly_pct, alarm_count)
+            is_selected = asset_id == selected_asset
+
+            card = html.Div(
+                id={"type": "asset-card", "index": asset_id},
+                n_clicks=0,
+                children=[
+
+                    html.Div([
+                        html.Span(asset_id, style={"fontWeight": "bold", "fontSize": 15}),
+                        html.Span(status, style={
+                            "float": "right",
+                            "fontSize": 11,
+                            "padding": "2px 8px",
+                            "borderRadius": 10,
+                            "backgroundColor": color,
+                            "color": "white",
+                        }),
+                    ], style={"marginBottom": 8}),
+
+                    html.Div(f"Runtime: {runtime_hours:.0f} h", style={"fontSize": 12}),
+                    html.Div(f"Anomalies: {anomaly_pct:.2f}%", style={"fontSize": 12}),
+                    html.Div(f"Avg vibration: {avg_vib:.4f} mm/s", style={"fontSize": 12}),
+                    html.Div(f"Avg temp: {avg_temp:.1f} C", style={"fontSize": 12}),
+                    html.Div(f"Alarms (24h): {alarm_count}", style={"fontSize": 12}),
+                    html.Div(f"Recent flag: {recent_flag}", style={"fontSize": 12, "color": "#7f8c8d"}),
+                ],
+                style={
+                    "flex": "1 0 100px",
+                    "minWidth": 100,
+                    "padding": 8,
+                    "backgroundColor": "#d0e3f2" if is_selected else "#f9f9f9",
+                    "borderRadius": 6,
+                    "border": f"4px solid {color}" if is_selected else f"2px solid {color}",
+                    "boxShadow": "0 0 6px rgba(52,152,219,0.6)" if is_selected else "none",
+                    "cursor": "pointer",
+                }
+
+
+            )
+            cards.append(card)
+
+        return html.Div(cards, style={"display": "flex", "gap": 12, "flexWrap": "wrap"})
+
     except Exception as e:
         return html.Div(f"Error: {str(e)}", style={"color": "red"})
+
+
+@callback(
+    Output("asset-selector", "value"),
+    Input({"type": "asset-card", "index": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_asset_from_card(n_clicks_list):
+    if not any(n_clicks_list):
+        return no_update
+
+    triggered = ctx.triggered_id
+    if triggered:
+        return triggered["index"]
+    return no_update

@@ -251,10 +251,10 @@ try:
                          WHERE timestamp BETWEEN '2025-01-01' AND '2025-12-31'
                          GROUP BY asset_id
                          ORDER BY asset_id
-                         """, 
+                         """,
                          engine
                          )
-    
+
     max_avg_vib = vib_df["avg_vib"].max()
     ok = len(vib_df) == 10
     check("Asset vibration levels", ok, f"Max avg vibration: {max_avg_vib:.2f} mm/s")
@@ -272,10 +272,10 @@ try:
                            FROM alarm_log_clean
                            GROUP BY asset_id
                            ORDER BY asset_id
-                           """, 
+                           """,
                            engine
                            )
-    
+
     ok = len(alarm_df) == 10 and alarm_df["alarm_count"].sum() > 0
     check("Asset alarm counts", ok, f"Total alarms: {alarm_df['alarm_count'].sum():,}")
     print("  Breakdown:")
@@ -295,15 +295,15 @@ try:
                           WHERE asset_id = 'P-0100'
                           AND timestamp BETWEEN '2025-01-01' AND '2025-12-31'
                           ORDER BY timestamp
-                          """, 
+                          """,
                           engine, parse_dates=["timestamp"]
                           )
     elapsed_full = time.time() - start
-    
+
     start = time.time()
     df_subsampled = df_full.set_index("timestamp").resample("5min").mean().reset_index()
     elapsed_resample = time.time() - start
-    
+
     ok = elapsed_full < 3.0
     detail = f"Full query: {elapsed_full:.3f}s ({len(df_full):,} rows), resample: {elapsed_resample:.3f}s ({len(df_subsampled):,} rows)"
     check("Historian subsampling performance", ok, detail)
@@ -318,18 +318,18 @@ try:
                           WHERE asset_id = 'P-0100'
                           AND timestamp BETWEEN '2025-06-01' AND '2025-12-31'
                           """, engine, parse_dates=["timestamp"])
-    
+
     alarm_df = pd.read_sql("""
                            SELECT COUNT(*) as cnt FROM alarm_log_clean
                            WHERE asset_id = 'P-0100'
                            AND timestamp >= datetime('2025-12-31', '-1 day')
                            """, engine)
-    
+
     env_df = pd.read_sql("""
                          SELECT timestamp, discharge_cfs FROM environmental_clean
                          WHERE timestamp BETWEEN '2025-06-01' AND '2025-12-31'
                          """, engine, parse_dates=["timestamp"])
-    
+
     ok = len(hist_df) > 0 and len(alarm_df) > 0 and len(env_df) > 0
     detail = f"Historian: {len(hist_df):,}, Alarms: {alarm_df['cnt'].iloc[0]}, Environmental: {len(env_df):,}"
     check("Dashboard callback data integrity", ok, detail)
@@ -348,7 +348,7 @@ try:
                                GROUP BY asset_id
                                ORDER BY anomaly_pct DESC
                                """, engine)
-    
+
     ok = len(anomaly_dist) == 10
     check("Asset anomaly rates", ok, f"Max anomaly rate: {anomaly_dist['anomaly_pct'].max():.2f}%")
     print("  Breakdown:")
@@ -356,7 +356,7 @@ try:
         print(f"    {row['asset_id']}: {row['anomaly_pct']:.2f}% ({row['anomaly_count']:,}/{row['total']:,})")
 except Exception as e:
     check("Asset anomaly rates", False, str(e))
-    
+
 if engine:
     engine.dispose()
 
@@ -368,4 +368,3 @@ if failed > 0:
 else:
     print("Dashboard test complete")
     sys.exit(0)
-    
