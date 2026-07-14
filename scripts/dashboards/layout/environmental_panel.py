@@ -6,16 +6,6 @@ def create_environmental_panel():
         html.H2("Environmental Context", style={"marginTop": 20}),
 
         html.Div([
-            html.Label("Show Environmental Data:", style={"fontWeight": "bold"}),
-            dcc.Checklist(
-                id="env-layer-toggle",
-                options=[{"label": " Display overlay", "value": "show"}],
-                value=["show"],
-                style={"display": "inline-block", "marginLeft": 10}
-            ),
-        ], style={"marginBottom": 15, "padding": "10px", "backgroundColor": "#f9f9f9", "borderRadius": "5px"}),
-
-        html.Div([
             html.Div([
                 html.Span("Correlation (Overlap):", style={"fontWeight": "bold"}),
                 html.Span(

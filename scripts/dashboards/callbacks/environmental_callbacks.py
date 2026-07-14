@@ -28,10 +28,9 @@ def set_engine(engine):
     Input("asset-selector", "value"),
     Input("date-range-picker", "start_date"),
     Input("date-range-picker", "end_date"),
-    Input("env-layer-toggle", "value"),
     Input("subsample-toggle", "value"),
 )
-def update_environmental_chart(asset_id, start_date, end_date, show_env, subsample_on):
+def update_environmental_chart(asset_id, start_date, end_date, subsample_on):
     if _engine is None:
         fig = go.Figure()
         fig.add_annotation(text="Database not connected")
@@ -92,7 +91,7 @@ def update_environmental_chart(asset_id, start_date, end_date, show_env, subsamp
             yaxis="y1",
         ))
 
-        if "show" in show_env and overlap_info["data_available"] and len(env_df) > 0:
+        if overlap_info["data_available"] and len(env_df) > 0:
             fig.add_trace(go.Scatter(
                 x=env_df["timestamp"],
                 y=env_df["discharge_cfs"],

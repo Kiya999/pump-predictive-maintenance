@@ -64,8 +64,8 @@ app.layout = html.Div([
         # Row 4: Motor Monitoring placeholder
         html.Div([
             create_motor_monitoring_panel(),
-        ], style={"display": "flex", "gap": 15}),
-    ], style={"maxWidth": 1800, "margin": "0 auto", "padding": "20px"}),
+        ], style={"display": "flex", "gap": 15, "marginBottom": 15}),
+    ], style={"maxWidth": 1800, "margin": "0 auto", "padding": "20px", "fontFamily": "Segoe UI, sans-serif", "color": "#2c3e50"}),
 
 ], style={"fontFamily": "sans-serif", "backgroundColor": "#ecf0f1", "minHeight": "100vh"})
 

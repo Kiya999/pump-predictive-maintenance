@@ -21,7 +21,7 @@ def create_header():
             html.H1("Pump and Motor Monitoring Dashboard",
                     style={"textAlign": "center", "marginTop": 0, "marginBottom": 5}),
             html.P("10 assets, 365 days, 1-minute resolution",
-                   style={"textAlign": "center", "color": "#7f8c8d", "marginBottom": 20}),
+                   style={"textAlign": "center", "color": "#7f8c8d", "marginBottom": 15}),
 
             html.Hr(style={"borderColor": "#bdc3c7"}),
 
@@ -43,7 +43,7 @@ def create_header():
                         end_date="2025-07-31",
                         display_format="YYYY-MM-DD"
                     ),
-                ], style={"flex": 1, "marginRight": 30}),
+                ], style={"flex": 1, "marginRight": 20}),
 
                 html.Div([
                     dcc.Checklist(
@@ -66,7 +66,7 @@ def create_header():
         ], style={
             "maxWidth": 1800,
             "margin": "0 auto",
-            "padding": "20px",
+            "padding": "15px",
         }),
 
     ], style={"backgroundColor": "#ecf0f1"})
