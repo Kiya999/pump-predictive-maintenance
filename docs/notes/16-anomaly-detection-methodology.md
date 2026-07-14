@@ -29,29 +29,29 @@ All detection methods operate on residuals relative to a pre-computed baseline. 
 ### Method 1: Z-score Thresholding
 Flag any point where (signal - baseline_mean) / baseline_std > 3.0.
 
-**Result**: Zero detections across all three failure scenarios.
-**Root cause**: Threshold of 3.0 is conservative and appropriate for Gaussian distributions. The bearing and insulation failures produce sudden step changes rather than gradual drift; the signal transitions from healthy to failed without extended pre-failure deviation exceeding 3 sigma. Z-score is well-suited for detecting sustained gradual drift but not abrupt failure modes.
+**Results**: Detects bearing (96.5% of P-F interval) and insulation (80.6%). No persistent detection for cavitation.
+**False positive rate** (healthy assets): ~0.3% on vibration, 0-97% on motor temp (strongly seasonal: near-zero in winter, near-100% in summer), 0-55% on diff pressure (also seasonal). Z-score is highly sensitive to the same seasonal baseline drift described in Section 5.
 
 ### Method 2: IQR Flagging
-Flag points outside Q1 - 1.5*IQR and Q3 + 1.5*IQR computed from a 1440-period (24-hour) rolling window. Multiplier: 1.0.
+Flag points outside Q1 - 1.0*IQR and Q3 + 1.0*IQR, computed on the residual (signal - baseline), using a 1440-period (24-hour) rolling window.
 
 **Results** (see lead_times.csv):
 
 Scenario | Lead Time (hours) | Percent of P-F Interval
 --- | --- | ---
-Bearing (vibration) | 2369 | 38.0
-Cavitation (diff_pressure) | 1377 | 95.6
-Insulation (motor_temp) | 3568 | 123.9
+Bearing (vibration) | No persistent detection | -
+Cavitation (diff_pressure) | No persistent detection | -
+Insulation (motor_temp) | 2819 | 97.9
 
-**Interpretation**: IQR is the only method detecting pre-failure anomalies. For insulation, the 123.9% figure (exceeding P-F interval) indicates detection before the defined P-F start, which likely reflects genuine early signal deviation. For cavitation, 95.6% means detection is very late (near functional failure). Bearing detection at 38% is reasonable.
+**Interpretation**: IQR only achieves persistent detection for insulation, arriving very late (97.9% of P-F; essentially at functional failure, not meaningfully early). Bearing and cavitation show no persistent detection under the 6-hour/70%-window persistence rule. For cavitation specifically, this reflects the intermittent-spike nature of the injected fault rather than a detector weakness (see Section 7).
 
-**False positive rate** (healthy assets): 95.7% on vibration, 25-47% on temperature and pressure. Unacceptably high for production deployment.
+**False positive rate** (healthy assets): ~4.2% on vibration (stable year-round), 1-4% on diff pressure, 1-8% on motor temp (seasonal). Substantially improved from an earlier implementation that computed IQR fences on the near-constant baseline series itself rather than on residuals. That bug produced ~96% FP on vibration.
 
 ### Method 3: Moving Average Deviation
 Compare 30-minute moving average against baseline mean; flag when deviation exceeds 1.5 * baseline_std.
 
-**Result**: Detects only insulation scenario (416 hours, 14.5% of P-F).
-**False positive rates**: 0% on vibration (excellent), 48.9% on motor_temp (alert fatigue risk).
+**Results**: Detects bearing (98.5% of P-F) and insulation (99.1% of P-F), both very late. No persistent detection for cavitation.
+**False positive rates**: 0% on vibration (excellent), up to 100% on motor_temp in summer months, up to 92% on diff_pressure; both driven by the same seasonal baseline drift as Z-score.
 
 ---
 
@@ -62,7 +62,7 @@ Results are in trend_detection_results.csv.
 
 | Window | Trend | p-value | Significant |
 |---|---|---|---|
-| 111.6h (capped full window, centered on first IQR detection) | stable | 0.324 | No |
+| Capped full window, centered on first persistent detection (Z-score used as fallback anchor since IQR shows no persistent bearing detection) | stable | 0.324 | No |
 | 72h trailing | stable | 0.925 | No |
 | 168h trailing | stable | 0.473 | No |
 
@@ -86,15 +86,15 @@ The high false positive rates (26-97%, see false_positives_by_signal_month.csv) 
 
 Method | Sensitivity | Specificity | Deployment Suitability
 --- | --- | --- | ---
-Z-score (threshold 3.0) | Low | High (0.26% FP)| Gross fault detection only
-IQR (window 1440, multiplier 1.0) | High | Low (95.7% FP) | Not production-ready as single method
-Moving average (window 30, threshold 1.5) | Medium | Medium | Insulation monitoring only
+Z-score (threshold 3.0) | High for step-change faults, seasonal blind spots | Low in summer (up to 97% FP on temp) | Unreliable without seasonal baseline correction
+IQR (window 1440, multiplier 1.0) | Low; only catches late-stage insulation faults | High (~1-4% FP) | Best specificity of the three; recommended as primary flagging method with operator context
+Moving average (window 30, threshold 1.5) | High for step-change faults, seasonal blind spots | Low in summer (up to 100% FP on temp) | Same seasonal caveat as Z-score
 
 **Recommended combination**:
-- Use **Z-score** as a high-confidence alarm (rare but reliable)
-- Use **IQR** as an early warning indicator (frequent, requires   operator context)
-- Use **Moving average** for insulation/thermal monitoring only
-- Display IQR vibration flags only with operator context warnings (95.7% FP rate requires operator judgment before action)
+- Use **IQR** as the primary flagging method for the dashboard; best specificity, stable across seasons.
+- Treat **Z-score** and **Moving average** flags as supplementary only, and discount them heavily May-September given seasonal FP spikes.
+- None of the three methods reliably detect cavitation under the current persistence rule; treat cavitation-prone assets as requiring supplementary monitoring (e.g., manual review of intermittent spike patterns).
+
 ---
 
 ## 7. Limitations
@@ -103,5 +103,6 @@ Moving average (window 30, threshold 1.5) | Medium | Medium | Insulation monitor
 2. **Seasonal baseline**: 30% training window captures only winter; summer performance degrades significantly.
 3. **No cross-signal detection**: Methods operate on single signals independently. Correlated anomalies across multiple signals (e.g., rising temperature and rising vibration) are not exploited.
 4. **Fixed thresholds**: No adaptive threshold adjustment for changing operating conditions.
+5. **Persistence rule vs. intermittent faults**: The 6-hour/70%-window persistence requirement, applied uniformly across all three methods, structurally cannot detect cavitation in this dataset; the injected fault manifests as intermittent pressure spikes rather than a sustained deviation. This is a methodological choice, not necessarily a bug; intermittent fault detection would require a different rule (e.g., spike-frequency counting within a window) rather than sustained-flag persistence.
 
 ---
