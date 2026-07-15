@@ -14,7 +14,7 @@ import dataretrieval.nwis as nwis
 import warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../etl-pipeline')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils')))
 from data_quality import assess_quality, format_report
 
 SITE_ID = '01646500'
