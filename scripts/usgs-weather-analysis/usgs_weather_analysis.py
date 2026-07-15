@@ -1,23 +1,39 @@
 # usgs_weather_analysis.py
+"""
+Download USGS streamflow and Open-Meteo weather data for the configured
+gauge/location, resample to hourly, and compute lag correlations between
+discharge and precipitation/temperature. Writes profile stats, exploratory
+plots, and correlation plots to output/.
+"""
 
 import os, time, sys, warnings
-
 import dataretrieval.nwis as nwis
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from scipy.signal import correlate
-
 warnings.filterwarnings('ignore')
 
-DC_LAT, DC_LON = 38.9072, -77.0369
-SITE = '01646500'
 
-end = datetime.now()
-start = end - timedelta(days=365)
+DC_LAT, DC_LON = 38.9072, -77.0369 # Washington, DC coordinates for Open-Meteo lookup
+SITE_ID = '01646500' # USGS gauge: Potomac River near Washington, DC
+START_DATE = '2025-02-01'
+END_DATE = '2026-02-01'
+OUTPUT_DIR = 'output'
+RESAMPLE_FREQ = '1H'
+GAP_THRESHOLD_MIN = 15
+LAG_TARGETS_HOURS = [0, 6, 12, 24]
+MAX_LAG_HOURS = 72
+
+def z(s):
+    """Return the z-score (standardized) version of a pandas Series."""
+    return (s - s.mean()) / s.std()
+
+start = datetime.strptime(START_DATE, '%Y-%m-%d')
+end = datetime.strptime(END_DATE, '%Y-%m-%d')
 
 print(f"Period: {start.date()} to {end.date()}")
 
@@ -25,7 +41,7 @@ print(f"Period: {start.date()} to {end.date()}")
 print("Downloading USGS streamflow...")
 for attempt in range(3):
     try:
-        df, meta = nwis.get_iv(sites=SITE, start=start.strftime('%Y-%m-%d'),
+        df, meta = nwis.get_iv(sites=SITE_ID, start=start.strftime('%Y-%m-%d'),
                                end=end.strftime('%Y-%m-%d'), parameterCd='00060')
         print(f"  {len(df)} records")
         time.sleep(2)
@@ -39,13 +55,13 @@ else:
 # Profile
 col, qc_col = '00060', '00060_cd'
 diffs = df.index.to_series().diff().dropna()
-gaps = diffs[diffs > pd.Timedelta('15 minutes')]
+gaps = diffs[diffs > pd.Timedelta(minutes=GAP_THRESHOLD_MIN)]
 gap_dur = gaps.sum()
 
-os.makedirs('output', exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Save profile
-with open('output/usgs_data_profile.txt', 'w') as f:
+with open(os.path.join (OUTPUT_DIR, 'usgs_data_profile.txt'), 'w') as f:
     f.write("Station: 01646500 - Potomac River near Wash DC (Little Falls)\n")
     f.write(f"Range: {df.index.min()} to {df.index.max()}\n")
     f.write(f"Records: {len(df)}, Missing: {df[col].isna().sum()}\n")
@@ -55,7 +71,7 @@ with open('output/usgs_data_profile.txt', 'w') as f:
             f"mean={df[col].mean():.0f}, median={df[col].median():.0f}")
 
 # Resample
-hourly = df[['00060']].resample('1H').mean()
+hourly = df[['00060']].resample(RESAMPLE_FREQ).mean()
 hourly.columns = ['01646500_cfs']
 hourly.index = hourly.index.tz_localize(None)
 print(f"Resampled to {len(hourly)} hourly records")
@@ -90,7 +106,7 @@ ax2.set_ylabel('# gaps')
 axes[2].grid(True, alpha=0.3)
 axes[2].legend(loc='upper left')
 plt.tight_layout()
-plt.savefig('output/usgs_exploratory_plots.png', dpi=150)
+plt.savefig(os.path.join (OUTPUT_DIR, 'usgs_exploratory_plots.png'), dpi=150)
 
 fig2, ax = plt.subplots(figsize=(12, 5))
 ax.hist(hourly['01646500_cfs'].dropna(), bins=80, density=True,
@@ -99,7 +115,7 @@ ax.set_title('Discharge Distribution')
 ax.set_xlabel('cfs')
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig('output/usgs_discharge_histogram.png', dpi=150)
+plt.savefig(os.path.join (OUTPUT_DIR, 'usgs_discharge_histogram.png'), dpi=150)
 plt.close('all')
 
 # Weather
@@ -123,13 +139,10 @@ print(f"  {len(weather)} records")
 # Join and correlate
 combined = hourly.join(weather, how='inner').dropna()
 print(f"Joined: {len(combined)} records")
-combined.to_csv('output/combined_data.csv')
+combined.to_csv(os.path.join (OUTPUT_DIR, 'combined_data.csv'))
 
 if len(combined) < 500:
     sys.exit("Not enough data")
-
-def z(s):
-    return (s - s.mean()) / s.std()
 
 q, p, t = z(combined['01646500_cfs']), z(combined['precip_mm']), z(combined['temp_c'])
 n = len(q)
@@ -138,24 +151,23 @@ corr_qp = correlate(q, p, mode='full', method='auto') / n
 corr_qt = correlate(q, t, mode='full', method='auto') / n
 lags = np.arange(-n + 1, n)
 
-targets = [0, 6, 12, 24]
-r_p = {lag: corr_qp[np.argmin(np.abs(lags - lag))] for lag in targets}
-r_t = {lag: corr_qt[np.argmin(np.abs(lags - lag))] for lag in targets}
+r_p = {lag: corr_qp[np.argmin(np.abs(lags - lag))] for lag in LAG_TARGETS_HOURS}
+r_t = {lag: corr_qt[np.argmin(np.abs(lags - lag))] for lag in LAG_TARGETS_HOURS}
 
-mask = np.abs(lags) <= 72
+mask = np.abs(lags) <= MAX_LAG_HOURS
 best_p = lags[np.where(mask)[0][np.argmax(np.abs(corr_qp[mask]))]]
 best_t = lags[np.where(mask)[0][np.argmax(np.abs(corr_qt[mask]))]]
 
 print("\nLag correlations (discharge vs):")
-for lag in targets:
+for lag in LAG_TARGETS_HOURS:
     print(f"  lag={lag:2d}h  precip r={r_p[lag]:.4f}  temp r={r_t[lag]:.4f}")
 print(f"  Best precip lag: {best_p}h (r={corr_qp[np.argmin(np.abs(lags - best_p))]:.4f})")
 print(f"  Best temp lag:   {best_t}h (r={corr_qt[np.argmin(np.abs(lags - best_t))]:.4f})")
 
-with open('output/lag_correlation_results.txt', 'w') as f:
+with open(os.path.join (OUTPUT_DIR, 'lag_correlation_results.txt'), 'w') as f:
     f.write(f"Station: 01646500, Period: {start.date()} to {end.date()}\n")
     f.write(f"Samples: {len(combined)}\n\n")
-    for lag in targets:
+    for lag in LAG_TARGETS_HOURS:
         f.write(f"lag={lag}h  Q vs Precip r={r_p[lag]:.4f}  Q vs Temp r={r_t[lag]:.4f}\n")
     f.write("\nBest within +/-72h:\n")
     f.write(f"  Precip: lag={best_p}h, r={corr_qp[np.argmin(np.abs(lags - best_p))]:.4f}\n")
@@ -165,8 +177,7 @@ with open('output/lag_correlation_results.txt', 'w') as f:
 fig3, axes3 = plt.subplots(2, 1, figsize=(14, 10))
 titles = ['Discharge vs Precipitation', 'Discharge vs Temperature']
 for ax, (title, corr) in zip(axes3, zip(titles, [corr_qp, corr_qt])):
-    m = np.abs(lags) <= 72
-    ax.plot(lags[m], corr[m], color='steelblue')
+    ax.plot(lags[mask], corr[mask], color='steelblue')
     ax.axhline(0, color='gray', lw=0.5)
     ax.axvline(0, color='red', ls='--', alpha=0.6)
     ax.set_title(title)
@@ -174,7 +185,7 @@ for ax, (title, corr) in zip(axes3, zip(titles, [corr_qp, corr_qt])):
     ax.set_ylabel("Pearson's r")
     ax.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig('output/lag_correlation_plots.png', dpi=150)
+plt.savefig(os.path.join (OUTPUT_DIR, 'lag_correlation_plots.png'), dpi=150)
 plt.close('all')
 
 print("Done")

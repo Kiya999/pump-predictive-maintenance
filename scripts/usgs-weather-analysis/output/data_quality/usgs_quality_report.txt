@@ -1,7 +1,7 @@
 ============================================================
 DATA QUALITY REPORT
 ============================================================
-Rows: 95,728    Columns: 2
+Rows: 74,246    Columns: 2
 
 --- Completeness ---
 Overall: 100.0%
@@ -11,21 +11,21 @@ Overall: 100.0%
   Duplicate timestamps (per asset): 0
 
 --- Gaps ---
-  Gap count: 1610
+  Gap count: 13709
   Longest gap: 245.0 min
   Top 5 gaps (min): [245.0, 240.0, 240.0, 240.0, 240.0]
 
 --- Timestamp Regularity ---
   Expected interval: 5.0 min
   Median interval: 5.0 min
-  Irregular intervals: 1610 (1.682%)
+  Irregular intervals: 13709 (18.465%)
 
 --- Outliers (IQR method) ---
-  discharge_cfs: 5504 outliers (5.75%)  fences=[-6810.0, 16390.0]
+  discharge_cfs: 5963 outliers (8.031%)  fences=[-5835.0, 14445.0]
 
 --- Unit Consistency ---
   Skipped: no pressure_cols or asset_col provided
 
 --- Signal Statistics ---
-  discharge_cfs                   mean=   5817.0870  min=    750.0000  max=  45400.0000  std=   6416.3033
+  discharge_cfs                   mean=   5687.5649  min=    750.0000  max= 156000.0000  std=   9225.0810
 ============================================================

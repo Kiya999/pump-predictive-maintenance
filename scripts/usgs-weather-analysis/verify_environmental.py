@@ -7,7 +7,7 @@ import os
 import sys
 import pandas as pd
 
-env_output_dir = "output"
+OUTPUT_DIR = "output"
 
 print("Verifying environmental correlation outputs\n")
 
@@ -24,7 +24,7 @@ required_files = [
 
 missing = []
 for fname in required_files:
-    fpath = os.path.join(env_output_dir, fname)
+    fpath = os.path.join(OUTPUT_DIR, fname)
     if os.path.exists(fpath):
         print(f"  {fname}")
     else:
@@ -38,7 +38,7 @@ if missing:
 # Check combined_data.csv
 print("\ncombined_data.csv:")
 try:
-    df = pd.read_csv(os.path.join(env_output_dir, "combined_data.csv"), parse_dates=["datetime"])
+    df = pd.read_csv(os.path.join(OUTPUT_DIR, "combined_data.csv"), parse_dates=["datetime"])
     print(f"  Rows: {len(df)}")
 
     required_cols = ["datetime", "01646500_cfs", "temp_c", "precip_mm"]
@@ -65,7 +65,7 @@ except Exception as e:
 # Check lag correlation results
 print("\nlag_correlation_results.txt:")
 try:
-    with open(os.path.join(env_output_dir, "lag_correlation_results.txt")) as f:
+    with open(os.path.join(OUTPUT_DIR, "lag_correlation_results.txt")) as f:
         content = f.read()
 
     if "Best within" not in content or "Precip:" not in content or "Temp:" not in content:
@@ -83,7 +83,7 @@ except Exception as e:
 # Check source file
 print("\nusgs_raw.csv:")
 try:
-    df_raw = pd.read_csv(os.path.join(env_output_dir, "usgs_raw.csv"))
+    df_raw = pd.read_csv(os.path.join(OUTPUT_DIR, "usgs_raw.csv"))
     print(f"  Rows: {len(df_raw)}")
 except Exception as e:
     print(f"  Warning: {e}")
