@@ -1,11 +1,17 @@
 # data_quality.py
+"""
+Data quality checks: completeness, gaps, duplicates, outliers, timestamp
+regularity, unit consistency. assess_quality() runs all checks and returns
+a report dict. format_report() converts to human-readable text.
+"""
+
 import pandas as pd
 import numpy as np
 from scipy.stats import iqr as scipy_iqr
 from scipy.stats import ttest_ind
 
-
 def welch_ttest(a, b):
+    """Welch's t-test with unequal variance"""
     n1, n2 = len(a), len(b)
     m1, m2 = a.mean(), b.mean()
     s1, s2 = a.std(ddof=1), b.std(ddof=1)
@@ -16,8 +22,8 @@ def welch_ttest(a, b):
     df_welch = num / den if den > 0 else n1 + n2 - 2
     return diff, t_stat, df_welch, p_value, m1, m2, s1, s2, n1, n2
 
-
 def compute_signal_stats(df, numeric_cols):
+    """Compute mean, min, max, std, count for numeric columns"""
     result = {}
     for col in numeric_cols:
         if col not in df.columns:
@@ -32,8 +38,8 @@ def compute_signal_stats(df, numeric_cols):
         }
     return result
 
-
 def check_completeness(df, numeric_cols):
+    """Check missing value count and completeness % per column."""
     total = len(df)
     per_col = {}
     for col in df.columns:
@@ -47,8 +53,8 @@ def check_completeness(df, numeric_cols):
     overall_pct = round(100.0 * (overall_cells - overall_missing) / overall_cells, 3) if overall_cells > 0 else 0.0
     return {"per_column": per_col, "overall_completeness_pct": overall_pct}
 
-
 def check_gaps(df, timestamp_col, expected_freq_min, asset_col=None):
+    """Find gaps > 1.5x expected frequency. Per-asset if asset_col provided."""
     threshold = pd.Timedelta(minutes=expected_freq_min) * 1.5
 
     if asset_col and asset_col in df.columns:
@@ -80,8 +86,8 @@ def check_gaps(df, timestamp_col, expected_freq_min, asset_col=None):
         "gap_timestamps": all_timestamps,
     }
 
-
 def check_duplicates(df, timestamp_col=None, asset_col=None):
+    """Count duplicate rows and duplicate (asset, timestamp) pairs."""
     dup_rows = int(df.duplicated().sum())
 
     dup_ts = 0
@@ -96,8 +102,8 @@ def check_duplicates(df, timestamp_col=None, asset_col=None):
         "duplicate_timestamp_count": dup_ts,
     }
 
-
 def check_outliers(df, numeric_cols, iqr_multiplier=1.5, asset_col=None):
+    """Detect outliers via IQR method. Per-asset if asset_col provided."""
     result = {}
     for col in numeric_cols:
         if col not in df.columns:
@@ -148,8 +154,8 @@ def check_outliers(df, numeric_cols, iqr_multiplier=1.5, asset_col=None):
 
     return result
 
-
 def check_timestamp_regularity(df, timestamp_col, expected_freq_min):
+    """Check if sampling intervals match expected frequency (10% tolerance)."""
     ts = df[timestamp_col].dropna().sort_values().reset_index(drop=True)
     if len(ts) < 2:
         return {"irregular_count": 0, "irregularity_rate_pct": 0.0, "median_interval_min": None}
@@ -168,9 +174,8 @@ def check_timestamp_regularity(df, timestamp_col, expected_freq_min):
         "irregularity_rate_pct": round(100.0 * irregular / len(diffs_min), 3),
     }
 
-
-
 def check_unit_consistency(df, asset_col, pressure_cols):
+    """Flag assets with pressure values >10x or <0.1x from group median."""
     if not pressure_cols or asset_col not in df.columns:
         return {"checked": False, "flagged_assets": {}}
 
@@ -191,9 +196,8 @@ def check_unit_consistency(df, asset_col, pressure_cols):
 
     return {"checked": True, "flagged_assets": flagged}
 
-
-
-def assess_quality(df: pd.DataFrame, config: dict) -> dict:
+def assess_quality(df, config):
+    """Run all quality checks and return combined report dict"""
     timestamp_col = config.get("timestamp_col")
     asset_col = config.get("asset_col")
     expected_freq_min = config.get("expected_freq_min")
@@ -228,8 +232,8 @@ def assess_quality(df: pd.DataFrame, config: dict) -> dict:
 
     return report
 
-
-def format_report(report: dict) -> str:
+def format_report(report):
+    """Convert quality report dict to formatted text"""
     lines = []
     lines.append("=" * 60)
     lines.append("DATA QUALITY REPORT")
