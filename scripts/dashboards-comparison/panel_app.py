@@ -4,6 +4,7 @@
 import panel as pn
 import holoviews as hv
 import pandas as pd
+
 from data_loader import load_combined
 
 pn.extension()

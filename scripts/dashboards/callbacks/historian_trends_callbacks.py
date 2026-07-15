@@ -1,10 +1,11 @@
 # historian_trends_callbacks.py
-from dash import callback, Input, Output
+
+import os
+import sys
+from dash import html, dcc, callback, Input, Output
 import pandas as pd
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-import sys
-import os
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
 sys.path.insert(0, os.path.join(project_root, 'scripts', 'analytics-pipeline'))
@@ -49,7 +50,6 @@ def _apply_hourly_baseline(timestamps, hourly_stats, num_std=3):
     Input("baseline-store", "data"),
 )
 def update_historian_trends(asset_id, start_date, end_date, subsample_on, baseline_data):
-    from dash import html, dcc
 
     if _engine is None or not asset_id:
         return html.Div("Select asset and date range")

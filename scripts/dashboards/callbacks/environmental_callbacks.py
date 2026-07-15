@@ -1,9 +1,9 @@
 # environmental_callbacks.py
+import os
+import sys
 from dash import callback, Input, Output
 import pandas as pd
 import plotly.graph_objects as go
-import sys
-import os
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
 sys.path.insert(0, os.path.join(project_root, 'scripts', 'analytics-pipeline'))

@@ -2,16 +2,16 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+from collections import Counter
 import pytest
 import random
 from datetime import datetime, timedelta
 from scipy.stats import mannwhitneyu
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from alarm_log_generator import build_assets, ALARM_TAG_TEMPLATES, FAILURE_FAMILY_MAP, make_event, generate_failure_correlated_alarms
 from historian_generator import FAILURE_SCENARIOS, SyntheticHistorian, HistorianConfig
-
 
 START = datetime(2025, 1, 1)
 
@@ -174,7 +174,6 @@ class TestFailureCorrelation:
         fmt = "%Y-%m-%d %H:%M:%S"
 
         def daily_counts(asset_id):
-            from collections import Counter
             c = Counter()
             for r in full_rows:
                 if r["asset_id"] != asset_id:
@@ -212,7 +211,6 @@ class TestISA182:
 
     def test_no_asset_dominates(self, full_rows):
         # no single asset should account for more than 3x the average share
-        from collections import Counter
         counts = Counter(r["asset_id"] for r in full_rows)
         avg = len(full_rows) / 10
         for asset_id, n in counts.items():

@@ -4,6 +4,7 @@ import dash
 from dash import dcc, html, Input, Output
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
 from data_loader import load_combined
 
 print("Loading...")

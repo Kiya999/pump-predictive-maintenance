@@ -2,11 +2,13 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pytest
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from data_quality import assess_quality, format_report, check_completeness, check_gaps, check_duplicates, check_outliers, check_timestamp_regularity, check_unit_consistency
 
 CSV_PATH = "output/synthetic_historian_10x365_1min.csv"

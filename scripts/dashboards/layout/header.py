@@ -1,8 +1,8 @@
 # header.py
+import os
 from dash import html, dcc
 import pandas as pd
 from sqlalchemy import create_engine
-import os
 
 db_path = os.path.join(os.path.dirname(__file__), "../..", "etl-pipeline", "output", "etl_pipeline.db")
 

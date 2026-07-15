@@ -1,8 +1,8 @@
 # data_dictionary.py
 
+import os
 import pandas as pd
 import sqlite3
-import os
 
 os.makedirs("output", exist_ok=True)
 

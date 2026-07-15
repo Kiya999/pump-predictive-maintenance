@@ -1,10 +1,10 @@
 # data_loader.py
 
+import os
 import pandas as pd
 import dataretrieval.nwis as nwis
 import requests
 from datetime import datetime, timedelta
-import os
 
 CACHE_DIR = 'cache'
 

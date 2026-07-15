@@ -8,6 +8,8 @@ import time
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0, os.path.join(project_root, 'scripts', 'analytics-pipeline'))
 from environmental_correlation import compute_overlap_correlation
+from layout.header import ASSET_OPTIONS
+from layout.environmental_panel import create_environmental_panel
 
 db_path = os.path.join(os.path.dirname(__file__), "..", "etl-pipeline", "output", "etl_pipeline.db")
 
@@ -226,7 +228,6 @@ except Exception as e:
 print()
 
 try:
-    from layout.header import ASSET_OPTIONS
     ok = len(ASSET_OPTIONS) == 10 and ASSET_OPTIONS[0]["value"] == "P-0100"
     check("Header module", ok, f"Loaded {len(ASSET_OPTIONS)} assets")
 except Exception as e:
@@ -235,7 +236,6 @@ except Exception as e:
 print()
 
 try:
-    from layout.environmental_panel import create_environmental_panel
     panel = create_environmental_panel()
     ok = panel is not None and hasattr(panel, 'children')
     check("Environmental panel", ok)
@@ -287,7 +287,6 @@ except Exception as e:
 print()
 
 try:
-    import time
     start = time.time()
     df_full = pd.read_sql("""
                           SELECT timestamp, flow_m3h, vibration_mm_s

@@ -2,10 +2,11 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import pytest
 import numpy as np
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from historian_generator import HistorianConfig, SyntheticHistorian
 from validate_synthetic_data import welch_ttest
 
