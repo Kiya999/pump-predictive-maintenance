@@ -1,4 +1,9 @@
-# etl_verify.py
+# verify_etl_output.py
+"""
+Verify ETL pipeline output: inspect database tables, row counts, timestamp
+ranges, assets, quality flags. Quick sanity check after pipeline run.
+"""
+
 import gc
 import pandas as pd
 from sqlalchemy import create_engine, inspect

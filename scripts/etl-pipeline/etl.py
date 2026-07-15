@@ -1,4 +1,9 @@
 # etl.py
+"""
+ETL pipeline: extract historian/alarm/environmental data from CSV, normalize
+timestamps, resample, convert units, apply quality flags, and load to SQLite.
+"""
+
 import os
 import json
 import logging
@@ -23,29 +28,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-def extract_historian(path):
+def extract_historian(path, datetime_cols):
+    """Load historian time series from CSV"""
     logger.info(f"Extracting historian from {path}")
-    df = pd.read_csv(path, parse_dates=["timestamp"], dayfirst=False)
+    df = pd.read_csv(path, parse_dates=datetime_cols, dayfirst=False)
     logger.info(f"Loaded {len(df)} rows")
     return df
 
-
-def extract_alarm_log(path):
+def extract_alarm_log(path, datetime_cols):
+    """Load alarm event log from CSV"""
     logger.info(f"Extracting alarm log from {path}")
-    df = pd.read_csv(path, parse_dates=["activation_time", "ack_time", "clear_time"])
+    df = pd.read_csv(path, parse_dates=datetime_cols)
     logger.info(f"Loaded {len(df)} rows")
     return df
 
-
-def extract_environmental(path):
+def extract_environmental(path, datetime_cols):
+    """Load environmental data from CSV"""
     logger.info(f"Extracting environmental from {path}")
-    df = pd.read_csv(path, parse_dates=["datetime"])
+    df = pd.read_csv(path, parse_dates=datetime_cols)
     logger.info(f"Loaded {len(df)} rows")
     return df
-
 
 def normalize_timestamps(df, col_name, source_tz, target_tz="UTC"):
+    """Localize and convert datetime column to target timezone."""
     if col_name not in df.columns:
         logger.warning(f"Column {col_name} not found")
         return df
@@ -64,8 +69,8 @@ def normalize_timestamps(df, col_name, source_tz, target_tz="UTC"):
 
     return df
 
-
 def resample_data(df, timestamp_col, frequency):
+    """Resample to specified frequency, keeping per-asset grouping."""
     if frequency is None:
         logger.info("Skipping resample (event data)")
         return df
@@ -98,8 +103,8 @@ def resample_data(df, timestamp_col, frequency):
     logger.info(f"Resampled to {frequency}: {len(df)} to {len(df_resampled)} rows")
     return df_resampled
 
-
 def apply_unit_conversions(df, asset_id_col, conversions_config):
+    """Apply per-asset unit conversion factors from config."""
     df = df.copy()
 
     if asset_id_col not in df.columns:
@@ -123,22 +128,22 @@ def apply_unit_conversions(df, asset_id_col, conversions_config):
 
     return df
 
-
 def standardize_columns(df, mapping):
+    """Rename columns according to mapping dict"""
     df = df.copy()
     rename_dict = {k: v for k, v in mapping.items() if k in df.columns}
     df = df.rename(columns=rename_dict)
     logger.info(f"Standardized {len(rename_dict)} columns")
     return df
 
-
 def add_quality_flags(df, quality_report_path):
+    """Add quality_flag column based on data quality report JSON."""
     df = df.copy()
     df["quality_flag"] = "pass"
 
     # Columns that can be NULL without signaling a data quality issue
     OPTIONAL_COLUMNS = {
-        "is_test_case",# Metadata: only populated for test alarms
+        "is_test_case", # Metadata: only populated for test alarms
         "ack_time", # Conditional: NULL if alarm not yet acknowledged
         "clear_time", # Conditional: NULL if alarm still active
         "failure_type", # Metadata: only populated when failure injected
@@ -190,8 +195,8 @@ def add_quality_flags(df, quality_report_path):
     logger.info(f"Quality flags: {flag_counts}")
     return df
 
-
 def transform_historian(df_raw, config):
+    """Normalize timestamps, resample, convert units, standardize, flag quality."""
     logger.info("Transforming historian")
 
     source_config = config["sources"]["historian"]
@@ -223,8 +228,8 @@ def transform_historian(df_raw, config):
     logger.info(f"Historian transform complete: {len(df)} rows")
     return df
 
-
 def transform_alarm_log(df_raw, config):
+    """Normalize timestamps, standardize, flag quality."""
     logger.info("Transforming alarm log")
 
     source_config = config["sources"]["alarm_log"]
@@ -248,8 +253,8 @@ def transform_alarm_log(df_raw, config):
     logger.info(f"Alarm log transform complete: {len(df)} rows")
     return df
 
-
 def transform_environmental(df_raw, config):
+    """Normalize timestamps, resample, standardize, flag quality."""
     logger.info("Transforming environmental")
 
     source_config = config["sources"]["environmental"]
@@ -279,8 +284,8 @@ def transform_environmental(df_raw, config):
     logger.info(f"Environmental transform complete: {len(df)} rows")
     return df
 
-
 def create_database_schema(engine):
+    """Create historian_clean, alarm_log_clean, environmental_clean, and pipeline_runs tables."""
     metadata = MetaData()
 
     Table('historian_clean', metadata,
@@ -343,8 +348,8 @@ def create_database_schema(engine):
     metadata.create_all(engine)
     logger.info("Database schema created")
 
-
 def load_to_sqlite(dataframes, engine):
+    """Insert cleaned dataframes to database tables, matching schema."""
     ts_cols = {"historian": "timestamp", "alarm_log": "timestamp", "environmental": "timestamp"}
 
     inspector = inspect(engine)
@@ -368,10 +373,9 @@ def load_to_sqlite(dataframes, engine):
         df.to_sql(table_name, engine, if_exists="append", index=False)
         logger.info(f"Loaded {len(df)} rows to {table_name}")
 
-
 def log_pipeline_run(engine, run_timestamp, config, df_in_counts, df_out_counts,
                      quality_summaries, errors):
-
+    """Record pipeline run metadata and row counts to pipeline_runs table."""
     quality_summary_str = json.dumps(quality_summaries)
     errors_str = json.dumps(errors) if errors else None
     status = "success" if not errors else "failed"
@@ -396,8 +400,8 @@ def log_pipeline_run(engine, run_timestamp, config, df_in_counts, df_out_counts,
     run_df.to_sql('pipeline_runs', engine, if_exists='append', index=False)
     logger.info(f"Pipeline run logged: {status}")
 
-
 def run_pipeline(config=None):
+    """Execute full ETL pipeline: extract, transform, load. Returns True on success."""
     if config is None:
         config = CONFIG
 
@@ -412,9 +416,12 @@ def run_pipeline(config=None):
 
     try:
         logger.info("EXTRACT LAYER")
-        df_historian_raw = extract_historian(config["sources"]["historian"]["path"])
-        df_alarm_log_raw = extract_alarm_log(config["sources"]["alarm_log"]["path"])
-        df_environmental_raw = extract_environmental(config["sources"]["environmental"]["path"])
+        df_historian_raw = extract_historian(config["sources"]["historian"]["path"],
+                                             config["sources"]["historian"]["datetime_cols"])
+        df_alarm_log_raw = extract_alarm_log(config["sources"]["alarm_log"]["path"],
+                                             config["sources"]["alarm_log"]["datetime_cols"])
+        df_environmental_raw = extract_environmental(config["sources"]["environmental"]["path"],
+                                                     config["sources"]["environmental"]["datetime_cols"])
 
         df_in_counts = {
             "historian": len(df_historian_raw),
@@ -483,7 +490,6 @@ def run_pipeline(config=None):
     finally:
         for handler in logger.handlers:
             handler.close()
-
 
 if __name__ == "__main__":
     try:

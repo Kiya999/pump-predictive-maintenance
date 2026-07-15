@@ -1,4 +1,8 @@
 # etl_config.py
+"""
+ETL configuration: data source paths, output locations, timezones, column
+mappings, unit conversions, and quality report paths.
+"""
 
 CONFIG = {
     "sources": {
@@ -7,18 +11,21 @@ CONFIG = {
             "frequency": "1min",
             "timestamp_col": "timestamp",
             "tz": "UTC",
+            "datetime_cols": ["timestamp"],
         },
         "alarm_log": {
             "path": "../historian-generator/output/alarm_log.csv",
             "frequency": None,
             "timestamp_col": "activation_time",
             "tz": "UTC",
+            "datetime_cols": ["activation_time", "ack_time", "clear_time"],
         },
         "environmental": {
             "path": "../usgs-weather-analysis/output/usgs_raw.csv",
             "frequency": "5min",
             "timestamp_col": "datetime",
             "tz": "UTC",
+            "datetime_cols": ["datetime"],
         },
     },
 
