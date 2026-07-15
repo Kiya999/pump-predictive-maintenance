@@ -26,132 +26,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import sqlite3
 
-# Nominal operating points from Grundfos NK/NKE databooklet
-# Values are approximate BEP duty points from the biggest impleller size curve
-PUMP_CURVES = [
-    # 2-pole pumps (2900 RPM)
-    {
-        "model": "NK 32-125",
-        "speed_rpm": 2900,
-        "impeller_diameter_mm": 142,
-        "pump_eta": 77.3,
-        "nominal_flow_m3h": 27,
-        "nominal_head_m": 25,
-        "motor_power_kw": 2.5,
-        "npsh_m": 1.8,
-        "suction_pressure_bar": 0.5,
-    },
-    {
-        "model": "NK 40-160",
-        "speed_rpm": 2900,
-        "impeller_diameter_mm": 177,
-        "pump_eta": 72.0,
-        "nominal_flow_m3h": 44,
-        "nominal_head_m": 40,
-        "motor_power_kw": 7,
-        "npsh_m": 2,
-        "suction_pressure_bar": 0.5,
-    },
-    {
-        "model": "NK 50-200",
-        "speed_rpm": 2900,
-        "impeller_diameter_mm": 219,
-        "pump_eta": 79.3,
-        "nominal_flow_m3h": 85,
-        "nominal_head_m": 60,
-        "motor_power_kw": 17,
-        "npsh_m": 3,
-        "suction_pressure_bar": 0.8,
-    },
-    {
-        "model": "NK 65-250",
-        "speed_rpm": 2900,
-        "impeller_diameter_mm": 263,
-        "pump_eta": 74.4,
-        "nominal_flow_m3h": 135,
-        "nominal_head_m": 85,
-        "motor_power_kw": 42,
-        "npsh_m": 6,
-        "suction_pressure_bar": 1.0,
-    },
-    {
-        "model": "NK 80-250",
-        "speed_rpm": 2900,
-        "impeller_diameter_mm": 270,
-        "pump_eta": 81.9,
-        "nominal_flow_m3h": 235,
-        "nominal_head_m": 95,
-        "motor_power_kw": 75,
-        "npsh_m": 5,
-        "suction_pressure_bar": 1.0,
-    },
-    {
-        "model": "NK 80-315",
-        "speed_rpm": 2900,
-        "impeller_diameter_mm": 330,
-        "pump_eta": 71.7,
-        "nominal_flow_m3h": 230,
-        "nominal_head_m": 125,
-        "motor_power_kw": 110,
-        "npsh_m": 8.5,
-        "suction_pressure_bar": 1.2,
-    },
-    # 4-pole pumps (1450 RPM)
-    {
-        "model": "NK 100-200",
-        "speed_rpm": 1450,
-        "impeller_diameter_mm": 219,
-        "pump_eta": 82.9,
-        "nominal_flow_m3h": 175,
-        "nominal_head_m": 14,
-        "motor_power_kw": 8,
-        "npsh_m": 2,
-        "suction_pressure_bar": 1.5,
-    },
-    {
-        "model": "NK 100-250",
-        "speed_rpm": 1450,
-        "impeller_diameter_mm": 270,
-        "pump_eta": 81.7,
-        "nominal_flow_m3h": 175,
-        "nominal_head_m": 23.5,
-        "motor_power_kw": 14,
-        "npsh_m": 1.7,
-        "suction_pressure_bar": 1.5,
-    },
-    {
-        "model": "NK 125-315",
-        "speed_rpm": 1450,
-        "impeller_diameter_mm": 330,
-        "pump_eta": 82.3,
-        "nominal_flow_m3h": 220,
-        "nominal_head_m": 33,
-        "motor_power_kw": 24,
-        "npsh_m": 2,
-        "suction_pressure_bar": 1.5,
+from historian_config import (OUTPUT_DIR, CSV_PATH, DB_PATH, FAILURE_SCENARIOS,
+                              UNIT_MISMATCH_ASSET, THERMAL_TAU_MIN, PUMP_CURVES,)
 
-    },
-    {
-        "model": "NK 150-400",
-        "speed_rpm": 1450,
-        "impeller_diameter_mm": 415,
-        "pump_eta": 81.7,
-        "nominal_flow_m3h": 500,
-        "nominal_head_m": 53,
-        "motor_power_kw": 85,
-        "npsh_m": 4,
-        "suction_pressure_bar": 2,
-    },
-]
-
-FAILURE_SCENARIOS = [
-    # Bearing degradation on P-0100, starting day 100, ramp 260 days, severity 4
-    {"scenario": "bearing", "asset_id": "P-0100", "start_day": 100, "ramp_days": 260, "final_severity": 4.0},
-    # Cavitation on P-0300, starting day 200, ramp 60 days, severity 3
-    {"scenario": "cavitation", "asset_id": "P-0300", "start_day": 200, "ramp_days": 60, "final_severity": 3.0},
-    # Insulation on P-0500, starting day 150, ramp 120 days, severity 3.5
-    {"scenario": "insulation", "asset_id": "P-0500", "start_day": 150, "ramp_days": 120, "final_severity": 3.5},
-]
 
 @dataclass
 class HistorianConfig:
@@ -173,7 +50,8 @@ class HistorianConfig:
 
     gap_fraction: float = 0.001 # approximate fraction of rows to remove
     duplicate_per_asset: int = 3 # number of duplicate timestamps per asset
-    unit_mismatch_asset: str = "P-0700" # asset that gets pressure in kPa instead of bar
+    unit_mismatch_asset: str = UNIT_MISMATCH_ASSET # asset that gets pressure in kPa instead of bar
+    thermal_tau_min: float = THERMAL_TAU_MIN # motor thermal inertia time constant
 
     def __post_init__(self):
         assert self.num_assets >= 1, "num_assets must be >= 1"
@@ -188,34 +66,33 @@ class HistorianConfig:
 
 
 def _daily_pattern(t_hours):
-    # Sine wave peaks around 14:00, troughs around 02:00
+    """Sine wave peaks around 14:00, troughs around 02:00"""
     raw = np.sin(np.pi * (t_hours - 6) / 12)
     raw = np.clip(raw, -1, 1)
     scaled = (raw + 1) / 2
     return scaled
 
 
-def _weekly_pattern(t_days, base_time=None):
-    # Weekend factor = 0.85 (15% demand reduction Sat-Sun)
-    if base_time is not None:
-        offset = base_time.weekday()  # 0=Mon, 1=Tue, ..., 6=Sun
-    else:
-        offset = 0
+def _weekly_pattern(t_days, base_time):
+    """Weekend factor = 0.85 (15% demand reduction Sat-Sun)"""
+    offset = base_time.weekday()  # 0=Mon, 1=Tue, ..., 6=Sun
     dow = (t_days + offset) % 7
     return np.where(dow >= 5, 0.85, 1.0)
 
 
-def _seasonal_pattern(t_days, period_days=365, amp=0.3):
-    # amp controls seasonal amplitude: default 0.3 = +/-30% around 0.7 baseline
+def _seasonal_pattern(t_days, period_days, amp):
+    """Sinusoidal annual cycle: +/-amp% around 0.7 baseline"""
     phase = 2 * np.pi * t_days / period_days
     return 0.7 + amp * np.sin(phase - np.pi / 2)
 
 
 def _drift(t_days, rate):
+    """Linear multiplicative drift per day"""
     return 1.0 + rate * t_days
 
 
 def generate_flow(asset, t_hours, t_days, config, rng):
+    """Combine diurnal, weekly, seasonal patterns with noise and drift"""
     diurnal = _daily_pattern(t_hours)
     weekly = _weekly_pattern(t_days, config.base_time)
     seasonal = _seasonal_pattern(t_days, config.period_days, config.season_amp)
@@ -229,6 +106,7 @@ def generate_flow(asset, t_hours, t_days, config, rng):
 
 
 def generate_suction_pressure(asset, flow, config, rng):
+    """Base pressure minus friction losses increasing with flow"""
     base_p = asset["suction_pressure_bar"]
     flow_frac = flow / asset["nominal_flow_m3h"]
     # Friction losses increase slightly with flow
@@ -240,6 +118,7 @@ def generate_suction_pressure(asset, flow, config, rng):
 
 
 def generate_discharge_pressure(asset, flow, config, rng):
+    """Head curve physics: head decreases with flow, convert to bar."""
     head_m = asset["nominal_head_m"]
     flow_frac = flow / asset["nominal_flow_m3h"]
     # Head decreases as flow increases (pump curve characteristic)
@@ -254,10 +133,12 @@ def generate_discharge_pressure(asset, flow, config, rng):
 
 
 def generate_diff_pressure(disch_p, suction_p):
+    """Differential pressure: discharge minus suction."""
     return disch_p - suction_p
 
 
 def generate_motor_power(asset, flow, diff_p, config, rng):
+    """Hydraulic power divided by efficiency curve"""
     flow_frac = flow / asset["nominal_flow_m3h"]
     # Quadratic efficiency curve, peaks near 85% of nominal flow
     efficiency = 0.85 - 0.3 * (flow_frac - 0.85)**2
@@ -272,7 +153,7 @@ def generate_motor_power(asset, flow, diff_p, config, rng):
 
 
 def generate_motor_temp(t_days, power, asset, config, rng):
-    # Ambient follows seasonal cycle; temp rise proportional to load
+    """Ambient plus power-dependent temperature rise."""
     ambient = 15 + 10 * _seasonal_pattern(t_days, config.period_days, config.season_amp)
     power_frac = power / asset["motor_power_kw"]
     temp_rise = 30 * power_frac
@@ -284,6 +165,7 @@ def generate_motor_temp(t_days, power, asset, config, rng):
 
 
 def generate_vibration(asset, flow, config, rng):
+    """Baseline healthy signal: small constant plus noise"""
     base_vib = 0.04
     noise = rng.normal(0, 0.001, size=len(flow))
     vib = base_vib + noise
@@ -292,6 +174,7 @@ def generate_vibration(asset, flow, config, rng):
 
 
 def generate_speed(asset, t_hours, config, rng):
+    """Nominal RPM with small variation"""
     base_rpm = asset["speed_rpm"]
     variation = rng.normal(0, base_rpm * 0.002, size=len(t_hours))
     speed = base_rpm + variation
@@ -299,8 +182,8 @@ def generate_speed(asset, t_hours, config, rng):
     return speed
 
 
-def apply_thermal_inertia(signal, tau_min=15, dt_min=1):
-    # First-order low-pass filter simulating thermal mass
+def apply_thermal_inertia(signal, tau_min, dt_min):
+    """First-order low-pass filter simulating thermal mass"""
     alpha = 1 - np.exp(-dt_min / tau_min)
     filtered = np.zeros_like(signal)
     filtered[0] = signal[0]
@@ -311,7 +194,8 @@ def apply_thermal_inertia(signal, tau_min=15, dt_min=1):
 
 # Failure scenario injection functions
 def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day, ramp_days, final_severity, rng):
-    # noise only applied during degradation window, proportional to ramp
+    """Vibration ramp with delayed temperature rise.
+    noise only applied during degradation window, proportional to ramp"""
 
     n = len(t_days)
     ramp = np.ones(n)
@@ -345,9 +229,9 @@ def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day,
 
 
 def inject_cavitation(signal_flow, signal_diff_p, signal_vibration, t_days, start_day, ramp_days, final_severity, rng):
-    # Periodic spikes in differential pressure, flow instability, increasing vibration.
-    # P-F lead time: weeks to months (days if severe)
-
+    """Periodic spikes in differential pressure, flow instability, increasing vibration.
+    P-F lead time: weeks to months (days if severe)
+    """
     n = len(t_days)
     mask = t_days >= start_day
     if not mask.any():
@@ -376,8 +260,9 @@ def inject_cavitation(signal_flow, signal_diff_p, signal_vibration, t_days, star
 
 
 def inject_insulation_degradation(signal_temp, signal_power, t_days, start_day, ramp_days, final_severity, rng):
-    # Slow drift in motor temperature and gradual increase in power draw at same flow.
-    # P-F lead time: months to years
+    """Slow drift in motor temperature and gradual increase in power draw at same flow.
+    P-F lead time: months to years
+    """
     n = len(t_days)
     mask = t_days >= start_day
     if not mask.any():
@@ -398,8 +283,9 @@ def inject_insulation_degradation(signal_temp, signal_power, t_days, start_day, 
     return signal_temp, signal_power
 
 class SyntheticHistorian:
-
+    """Generate synthetic time series signals for all configured pump assets."""
     def __init__(self, config: HistorianConfig):
+        """Initialize assets from pump curves, compute time index"""
         self.config = config
         self.rng = np.random.default_rng(config.seed)
         self.assets = []
@@ -414,6 +300,7 @@ class SyntheticHistorian:
         self.timestamps = config.time_index
 
     def _assign_area(self, idx):
+        """Map asset index to operational area name."""
         areas = ["Raw_Water_Intake", "Chemical_Dosing", "Filtration",
                  "Booster_Station_A", "Booster_Station_B", "Wastewater_Lift",
                  "Effluent_Distribution", "Irrigation_Supply", "Backwash_System",
@@ -421,23 +308,25 @@ class SyntheticHistorian:
         return areas[idx % len(areas)]
 
     def generate_asset_data(self, asset):
+        """Generate all signals for one asset, apply failure scenarios"""
         flow = generate_flow(asset, self.t_hours, self.t_days, self.config, self.rng)
         suction_p = generate_suction_pressure(asset, flow, self.config, self.rng)
         disch_p = generate_discharge_pressure(asset, flow, self.config, self.rng)
         diff_p = generate_diff_pressure(disch_p, suction_p)
         power = generate_motor_power(asset, flow, diff_p, self.config, self.rng)
         temp_raw = generate_motor_temp(self.t_days, power, asset, self.config, self.rng)
-        temp = apply_thermal_inertia(temp_raw, tau_min=15, dt_min=self.config.freq_min)
+        temp = apply_thermal_inertia(temp_raw, tau_min=self.config.thermal_tau_min, dt_min=self.config.freq_min)
         vibration = generate_vibration(asset, flow, self.config, self.rng)
         speed = generate_speed(asset, self.t_hours, self.config, self.rng)
 
         for scenario in self.config.failure_scenarios:
             if scenario["asset_id"] != asset["asset_id"]:
                 continue
-            sname = scenario.get("scenario")
-            start_day = scenario.get("start_day", 30)
-            ramp_days = scenario.get("ramp_days", 60)
-            final_severity = scenario.get("final_severity", 3.0)
+            sname = scenario["scenario"]
+            start_day = scenario["start_day"]
+            ramp_days = scenario["ramp_days"]
+            final_severity = scenario["final_severity"]            
+            
             if sname == "bearing":
                 vibration, temp = inject_bearing_degradation(
                     vibration, temp, self.t_days, start_day, ramp_days, final_severity, self.rng)
@@ -449,7 +338,7 @@ class SyntheticHistorian:
                 # Recalculate motor power and temperature using updated flow and diff_p
                 power = generate_motor_power(asset, flow, diff_p, self.config, self.rng)
                 temp_raw = generate_motor_temp(self.t_days, power, asset, self.config, self.rng)
-                temp = apply_thermal_inertia(temp_raw, tau_min=15, dt_min=self.config.freq_min)
+                temp = apply_thermal_inertia(temp_raw, tau_min=self.config.thermal_tau_min, dt_min=self.config.freq_min)
 
             elif sname == "insulation":
                 temp, power = inject_insulation_degradation(
@@ -479,6 +368,7 @@ class SyntheticHistorian:
         return df
 
     def generate_all(self):
+        """Generate all assets, inject quality issues, sort and return."""
         print(f"Generating {self.config.num_assets} assets x "
               f"{self.config.n_samples} samples "
               f"({self.config.period_days} days @ {self.config.freq_min}min)...")
@@ -501,6 +391,7 @@ class SyntheticHistorian:
         return result
 
     def inject_data_quality_issues(self, df):
+        """Remove gaps. Add duplicates. Apply unit mismatch to cfg.unit_mismatch_asset"""
         rng = self.rng
         cfg = self.config
 
@@ -560,15 +451,12 @@ if __name__ == "__main__":
     gen = SyntheticHistorian(config)
     df = gen.generate_all()
 
-    output_folder = "output"
-    os.makedirs(output_folder, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    csv_path = os.path.join(output_folder, "synthetic_historian_10x365_1min.csv")
-    df.to_csv(csv_path, index=False)
-    print(f"CSV saved: {csv_path}")
+    df.to_csv(CSV_PATH, index=False)
+    print(f"CSV saved: {CSV_PATH}")
 
-    db_path = os.path.join(output_folder, "synthetic_historian.db")
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(DB_PATH)
     df.to_sql("historian_data", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"SQLite saved: {db_path}")
+    print(f"SQLite saved: {DB_PATH}")

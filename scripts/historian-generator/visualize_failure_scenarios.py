@@ -2,9 +2,11 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-from historian_generator import FAILURE_SCENARIOS
+
+from historian_config import CSV_PATH, FAILURE_SCENARIOS_DIR, FAILURE_SCENARIOS
 
 def build_scenario_info():
+    """Map failure scenarios to signal names and plot labels."""
     SIGNAL_MAP = {
         "bearing": {"signal": "vibration_mm_s", "secondary": "motor_temp_c",
                      "ylabel": "Vibration (mm/s)", "secondary_ylabel": "Motor Temperature (C)"},
@@ -26,12 +28,14 @@ def build_scenario_info():
         }
     return info
 
-def load_data(csv_path="output/synthetic_historian_10x365_1min.csv"):
+def load_data(csv_path):
+    """Load historian CSV, parse timestamps."""
     df = pd.read_csv(csv_path, parse_dates=["timestamp"])
     return df
 
 
 def get_pf_days(asset_id, full_df):
+    """Return P timestamp (start of degradation) and F timestamp (end of ramp)."""
     sub = full_df[full_df["asset_id"] == asset_id]
     if sub.empty:
         return None, None
@@ -49,6 +53,7 @@ def get_pf_days(asset_id, full_df):
 
 
 def annotate_pf(ax, p_ts, f_ts, p_label="Start of degradation (P)", f_label="Functional failure (F)"):
+    """Draw vertical lines and labels for P and F events on axis."""
     if p_ts is not None:
         ax.axvline(x=p_ts, color='green', linestyle='--', linewidth=1.5, alpha=0.7)
         x_off = p_ts + pd.Timedelta(days=3) # for better reading of the text
@@ -65,6 +70,7 @@ def annotate_pf(ax, p_ts, f_ts, p_label="Start of degradation (P)", f_label="Fun
 
 
 def plot_scenario(df, asset_id, info, output_folder):
+    """Create two-panel plot: primary and secondary signals with P-F markers"""
     sub = df[df["asset_id"] == asset_id].copy()
     if sub.empty:
         print(f"No data for asset {asset_id}, skipping.")
@@ -101,17 +107,12 @@ def plot_scenario(df, asset_id, info, output_folder):
     print(f"  Saved: {out_path}")
 
 
-def main():
-    output_folder = "failure_validation"
-    os.makedirs(output_folder, exist_ok=True)
+if __name__ == "__main__":
+    os.makedirs(FAILURE_SCENARIOS_DIR, exist_ok=True)
     print("Loading data...")
-    df = load_data()
+    df = load_data(CSV_PATH)
     scenario_info = build_scenario_info()
     for asset_id, info in scenario_info.items():
         print(f"Plotting {info['name']}...")
-        plot_scenario(df, asset_id, info, output_folder)
+        plot_scenario(df, asset_id, info, FAILURE_SCENARIOS_DIR)
     print("Done.")
-
-
-if __name__ == "__main__":
-    main()

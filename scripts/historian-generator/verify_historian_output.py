@@ -1,53 +1,41 @@
-# validate_synthetic_data.py
-"""Validate synthetic pump historian data
+# verify_historian_output.py
+"""Verify synthetic pump historian data
 
 Generates diagnostic plots, prints signal statistics, runs physical plausibility checks,
 and performs Welch's t-test for weekday/weekend demand reduction.
 Reads the CSV produced by historian_generator.py.
 """
 import os
+import sys
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy.stats import ttest_ind
 
-SIG_COLS = [
-    "flow_m3h", "suction_pressure_bar", "disch_pressure_bar",
-    "diff_pressure_bar", "motor_temp_c", "motor_power_kw",
-    "vibration_mm_s", "speed_rpm"
-]
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils')))
+from data_quality import welch_ttest
+from historian_config import CSV_PATH, HISTORIAN_VALIDATION_DIR, UNIT_MISMATCH_ASSET, SIGNAL_COLUMNS
+
 DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-
-def welch_ttest(a, b):
-    n1, n2 = len(a), len(b)
-    m1, m2 = a.mean(), b.mean()
-    s1, s2 = a.std(ddof=1), b.std(ddof=1)
-    diff = m2 - m1
-    t_stat, p_value = ttest_ind(a, b, equal_var=False)
-    num = (s1**2 / n1 + s2**2 / n2)**2
-    den = (s1**2 / n1)**2 / (n1 - 1) + (s2**2 / n2)**2 / (n2 - 1)
-    df_welch = num / den if den > 0 else n1 + n2 - 2
-    return diff, t_stat, df_welch, p_value, m1, m2, s1, s2, n1, n2
-
-
 def print_signal_stats(df):
+    """Print mean, min, max, std for all signals."""
     print("-"*40)
     print("\nSignal Statistics:")
-    for col in SIG_COLS:
+    for col in SIGNAL_COLUMNS:
         s = df[col]
         print(f"{col:25s}  mean={s.mean():10.3f}  min={s.min():10.3f}  max={s.max():10.3f}  std={s.std():10.3f}")
 
 
 def print_plausibility_checks(df):
+    """Verify pump physics: discharge > suction, correlations, ranges."""
     print("-"*40)
     print("\nPhysical Plausibility Checks:")
 
     failures = []
     for aid in df["asset_id"].unique():
-        if aid == "P-0700":
+        if aid == UNIT_MISMATCH_ASSET:
             continue
         sub = df[df["asset_id"] == aid]
         if not (sub["disch_pressure_bar"] > sub["suction_pressure_bar"]).all():
@@ -65,7 +53,6 @@ def print_plausibility_checks(df):
             print(f"  {aid}: {neg_dp} rows with diff_pressure <= 0 (check cavitation spikes)")
         else:
             print(f"  {aid}: differential pressure always positive")
-
 
     print()
 
@@ -91,6 +78,7 @@ def print_plausibility_checks(df):
 
 
 def print_day_night_weekday_weekend(df):
+    """Compare daytime vs nighttime and weekday vs weekend flows."""
     print("-"*40)
     df["hour"] = df["timestamp"].dt.hour
     day_flow = df[df["hour"].between(8, 20)]["flow_m3h"].mean()
@@ -104,6 +92,7 @@ def print_day_night_weekday_weekend(df):
 
 
 def print_weekly_ttest(df):
+    """Welch's t-test for statistical significance of weekly pattern."""
     print("-"*40)
     df["dow"] = df["timestamp"].dt.dayofweek
     weekday = df[df["dow"] < 5]["flow_m3h"]
@@ -123,6 +112,7 @@ def print_weekly_ttest(df):
         print("  -> Not statistically significant (p >= 0.05)")
 
 def print_failures(df):
+    """Count rows by failure type"""
     print("-"*40)
     if "failure_type" in df.columns:
         print("Failure type column exists")
@@ -134,6 +124,7 @@ def print_failures(df):
         print("No failure_type column")
 
 def plot_timeseries(df, asset_name, model_name, validation_folder):
+    """Seven-day time series of all eight signals"""
     week1 = df[df["timestamp"] < df["timestamp"].iloc[0] + pd.Timedelta(days=7)]
     fig, axes = plt.subplots(4, 2, figsize=(16, 12), sharex=True)
     signals = [
@@ -158,6 +149,7 @@ def plot_timeseries(df, asset_name, model_name, validation_folder):
 
 
 def plot_pump_curve(df, asset_name, model_name, validation_folder):
+    """Scatter: flow vs pressure, colored by vibration"""
     fig, ax = plt.subplots(figsize=(8, 6))
     sample = df.iloc[::100]
     scatter = ax.scatter(sample["flow_m3h"], sample["diff_pressure_bar"],
@@ -174,8 +166,9 @@ def plot_pump_curve(df, asset_name, model_name, validation_folder):
 
 
 def plot_correlation_matrix(df, asset_name, validation_folder):
+    """Heatmap of signal correlations"""
     fig, ax = plt.subplots(figsize=(10, 8))
-    corr = df[SIG_COLS].corr()
+    corr = df[SIGNAL_COLUMNS].corr()
     mask = np.triu(np.ones_like(corr), k=1)
     sns.heatmap(corr, mask=mask, annot=True, fmt=".2f", cmap="RdBu_r",
                 vmin=-1, vmax=1, center=0, square=True, ax=ax)
@@ -186,7 +179,7 @@ def plot_correlation_matrix(df, asset_name, validation_folder):
 
 
 def plot_diurnal_profiles(df, asset_name, model_name, validation_folder):
-    # Hourly profiles for flow, power, temp + vibration vs flow.
+    """Hourly profiles for flow, power, temp + vibration vs flow"""
     df["hour"] = df["timestamp"].dt.hour
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
@@ -234,6 +227,7 @@ def plot_diurnal_profiles(df, asset_name, model_name, validation_folder):
 
 
 def plot_weekly_bars(df, asset_name, validation_folder):
+    """Mean flow by day of week, weekends highlighted"""
     df["dow"] = df["timestamp"].dt.dayofweek
     daily_flow = df.groupby("dow")["flow_m3h"].mean()
 
@@ -249,14 +243,14 @@ def plot_weekly_bars(df, asset_name, validation_folder):
     plt.close()
 
 
-def run_validation(df, asset_name="P-0100", model_name="NK 32-125"):
+def run_validation(df, asset_name, model_name):
+    """Run all validation checks and generate plots"""
     print(f"\n{'=' * 60}")
     print(f"VALIDATION -- {asset_name} ({model_name})")
     print(f"Rows: {len(df):,}   Period: {df['timestamp'].max() - df['timestamp'].min()}")
     print(f"{'=' * 60}")
 
-    validation_folder = "validation"
-    os.makedirs(validation_folder, exist_ok=True)
+    os.makedirs(HISTORIAN_VALIDATION_DIR, exist_ok=True)
 
     print_signal_stats(df)
     print_plausibility_checks(df)
@@ -264,20 +258,18 @@ def run_validation(df, asset_name="P-0100", model_name="NK 32-125"):
     print_weekly_ttest(df)
     print_failures(df)
 
-    plot_timeseries(df, asset_name, model_name, validation_folder)
-    plot_pump_curve(df, asset_name, model_name, validation_folder)
-    plot_correlation_matrix(df, asset_name, validation_folder)
-    plot_diurnal_profiles(df, asset_name, model_name, validation_folder)
-    plot_weekly_bars(df, asset_name, validation_folder)
+    plot_timeseries(df, asset_name, model_name, HISTORIAN_VALIDATION_DIR)
+    plot_pump_curve(df, asset_name, model_name, HISTORIAN_VALIDATION_DIR)
+    plot_correlation_matrix(df, asset_name, HISTORIAN_VALIDATION_DIR)
+    plot_diurnal_profiles(df, asset_name, model_name, HISTORIAN_VALIDATION_DIR)
+    plot_weekly_bars(df, asset_name, HISTORIAN_VALIDATION_DIR)
     print("All plots saved.")
 
 
 if __name__ == "__main__":
-    csv_path = "output/synthetic_historian_10x365_1min.csv"
-
-    print(f"Loading CSV: {csv_path}")
+    print(f"Loading CSV: {CSV_PATH}")
     df = pd.read_csv(
-        csv_path,
+        CSV_PATH,
         parse_dates=["timestamp"],
         dtype={"asset_id": "category", "flow_m3h": "float32"}
     )
