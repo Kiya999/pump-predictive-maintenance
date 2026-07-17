@@ -198,14 +198,15 @@ def check_unit_consistency(df, asset_col, pressure_cols):
 
 def assess_quality(df, config):
     """Run all quality checks and return combined report dict"""
-    timestamp_col = config.get("timestamp_col")
-    asset_col = config.get("asset_col")
-    expected_freq_min = config.get("expected_freq_min")
-    iqr_multiplier = config.get("iqr_multiplier", 1.5)
-    pressure_cols = config.get("pressure_cols", [])
+    timestamp_col = config["timestamp_col"]
+    asset_col = config["asset_col"]
+    expected_freq_min = config["expected_freq_min"]
+    iqr_multiplier = config["iqr_multiplier"]
+    pressure_cols = config["pressure_cols"]
 
-    numeric_cols = config.get("numeric_cols")
-    if numeric_cols is None:
+    if "numeric_cols" in config and config["numeric_cols"] is not None:
+        numeric_cols = config["numeric_cols"]
+    else:
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
 
     report = {}
