@@ -1,15 +1,16 @@
-# tests/test_historian_generator.py
+# test_historian_generator.py
+"""Unit tests for historian generation: config validation, signal generation, failure scenario injection, data quality issues."""
 
 import sys
 import os
 import pytest
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'historian-generator')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'utils')))
 
 from historian_generator import HistorianConfig, SyntheticHistorian
-from validate_synthetic_data import welch_ttest
-
+from data_quality import welch_ttest
 
 @pytest.fixture(scope="module")
 def small_config():

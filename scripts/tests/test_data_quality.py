@@ -1,4 +1,5 @@
-# tests/test_data_quality.py
+# test_data_quality.py
+"""Unit tests for data_quality module: completeness, gaps, duplicates, outliers, timestamp regularity, unit consistency."""
 
 import sys
 import os
@@ -7,11 +8,12 @@ import pytest
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'historian-generator')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'utils')))
 
 from data_quality import assess_quality, format_report, check_completeness, check_gaps, check_duplicates, check_outliers, check_timestamp_regularity, check_unit_consistency
+from historian_config import CSV_PATH
 
-CSV_PATH = "output/synthetic_historian_10x365_1min.csv"
 NUMERIC_COLS = [
     "flow_m3h", "suction_pressure_bar", "disch_pressure_bar",
     "diff_pressure_bar", "motor_temp_c", "motor_power_kw",

@@ -1,4 +1,5 @@
-# tests/test_alarm_log_generator.py
+# test_alarm_log_generator.py
+"""Unit tests for alarm log generation: asset config, event creation, failure correlation, ISA-18.2 compliance."""
 
 import sys
 import os
@@ -8,7 +9,8 @@ import random
 from datetime import datetime, timedelta
 from scipy.stats import mannwhitneyu
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'historian-generator')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'utils')))
 
 from alarm_log_generator import build_assets, ALARM_TAG_TEMPLATES, FAILURE_FAMILY_MAP, make_event, generate_failure_correlated_alarms
 from historian_generator import FAILURE_SCENARIOS, SyntheticHistorian, HistorianConfig
