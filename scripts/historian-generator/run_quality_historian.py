@@ -1,42 +1,40 @@
 # run_quality_historian.py
+"""Assess data quality of synthetic historian CSV output."""
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../etl-pipeline')))
-
 import json
 import pandas as pd
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils')))
 from data_quality import assess_quality, format_report
 
-csv_path = "output/synthetic_historian_10x365_1min.csv"
-if not os.path.exists(csv_path):
-    print(f"Error: {csv_path} not found")
+from historian_config import OUTPUT_DIR, CSV_PATH, SIGNAL_COLUMNS, PRESSURE_COLUMNS, IQR_MULTIPLIER, FREQ_MIN
+
+if not os.path.exists(CSV_PATH):
+    print(f"Error: {CSV_PATH} not found")
     exit(1)
 
-df = pd.read_csv(csv_path, parse_dates=["timestamp"])
+df = pd.read_csv(CSV_PATH, parse_dates=["timestamp"])
 
 config = {
     "timestamp_col": "timestamp",
     "asset_col": "asset_id",
-    "expected_freq_min": 1,
-    "numeric_cols": [
-        "flow_m3h", "suction_pressure_bar", "disch_pressure_bar",
-        "diff_pressure_bar", "motor_temp_c", "motor_power_kw",
-        "vibration_mm_s", "speed_rpm",
-    ],
-    "iqr_multiplier": 1.5,
-    "pressure_cols": ["suction_pressure_bar", "disch_pressure_bar", "diff_pressure_bar"],
+    "expected_freq_min": FREQ_MIN,
+    "numeric_cols": SIGNAL_COLUMNS,
+    "iqr_multiplier": IQR_MULTIPLIER,
+    "pressure_cols": PRESSURE_COLUMNS,
 }
 
 report = assess_quality(df, config)
 text = format_report(report)
 
-os.makedirs("output/data_quality", exist_ok=True)
+output_path = os.path.join(OUTPUT_DIR, "data_quality")
+os.makedirs(output_path, exist_ok=True)
 
-with open("output/data_quality/historian_quality_report.txt", "w") as f:
+with open(os.path.join(output_path, "historian_quality_report.txt"), "w") as f:
     f.write(text)
 
-with open("output/data_quality/historian_quality_report.json", "w") as f:
+with open(os.path.join(output_path, "historian_quality_report.json"), "w") as f:
     json.dump(report, f, indent=2, default=str)
 
 print(text)

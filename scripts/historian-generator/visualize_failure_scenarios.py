@@ -1,23 +1,17 @@
 # visualize_failure_scenarios.py
+"""Plot failure scenario signals (primary + secondary) with P-F event markers per asset."""
+
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from historian_config import CSV_PATH, FAILURE_SCENARIOS_DIR, FAILURE_SCENARIOS
+from historian_config import CSV_PATH, FAILURE_SCENARIOS_DIR, FAILURE_SCENARIOS, FAILURE_SIGNAL_MAP
 
 def build_scenario_info():
     """Map failure scenarios to signal names and plot labels."""
-    SIGNAL_MAP = {
-        "bearing": {"signal": "vibration_mm_s", "secondary": "motor_temp_c",
-                     "ylabel": "Vibration (mm/s)", "secondary_ylabel": "Motor Temperature (C)"},
-        "cavitation": {"signal": "diff_pressure_bar", "secondary": "flow_m3h",
-                       "ylabel": "Differential Pressure (bar)", "secondary_ylabel": "Flow (m3/h)"},
-        "insulation": {"signal": "motor_temp_c", "secondary": "motor_power_kw",
-                       "ylabel": "Motor Temperature (C)", "secondary_ylabel": "Motor Power (kW)"},
-    }
     info = {}
     for s in FAILURE_SCENARIOS:
-        base = SIGNAL_MAP[s["scenario"]]
+        base = FAILURE_SIGNAL_MAP[s["scenario"]]
         info[s["asset_id"]] = {
             "name": s["scenario"].capitalize(),
             "scenario": s["scenario"],

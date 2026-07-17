@@ -15,7 +15,10 @@ import seaborn as sns
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils')))
 from data_quality import welch_ttest
-from historian_config import CSV_PATH, HISTORIAN_VALIDATION_DIR, UNIT_MISMATCH_ASSET, SIGNAL_COLUMNS
+
+from historian_config import (CSV_PATH, HISTORIAN_VALIDATION_DIR, UNIT_MISMATCH_ASSET,
+                              SIGNAL_COLUMNS, DAY_HOURS, NIGHT_HOURS,
+                              PUMP_CURVE_SAMPLE_STRIDE, FLOW_BIN_COUNT)
 
 DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -81,8 +84,8 @@ def print_day_night_weekday_weekend(df):
     """Compare daytime vs nighttime and weekday vs weekend flows."""
     print("-"*40)
     df["hour"] = df["timestamp"].dt.hour
-    day_flow = df[df["hour"].between(8, 20)]["flow_m3h"].mean()
-    night_flow = df[df["hour"].between(0, 5)]["flow_m3h"].mean()
+    day_flow = df[df["hour"].between(DAY_HOURS[0], DAY_HOURS[1])]["flow_m3h"].mean()
+    night_flow = df[df["hour"].between(NIGHT_HOURS[0], NIGHT_HOURS[1])]["flow_m3h"].mean()
     print(f"Day flow mean: {day_flow:.1f}, Night flow mean: {night_flow:.1f} (ratio={day_flow / night_flow:.2f})")
 
     df["dow"] = df["timestamp"].dt.dayofweek
@@ -151,7 +154,7 @@ def plot_timeseries(df, asset_name, model_name, validation_folder):
 def plot_pump_curve(df, asset_name, model_name, validation_folder):
     """Scatter: flow vs pressure, colored by vibration"""
     fig, ax = plt.subplots(figsize=(8, 6))
-    sample = df.iloc[::100]
+    sample = df.iloc[::PUMP_CURVE_SAMPLE_STRIDE]
     scatter = ax.scatter(sample["flow_m3h"], sample["diff_pressure_bar"],
                         c=sample["vibration_mm_s"], cmap="viridis",
                         s=10, alpha=0.6)
@@ -211,7 +214,7 @@ def plot_diurnal_profiles(df, asset_name, model_name, validation_folder):
     axes[1, 0].grid(True, alpha=0.3)
 
     # Vibration vs flow
-    df["flow_bin"] = pd.cut(df["flow_m3h"], bins=20)
+    df["flow_bin"] = pd.cut(df["flow_m3h"], bins=FLOW_BIN_COUNT)
     vib_by_flow = df.groupby("flow_bin", observed=False)["vibration_mm_s"].mean()
     bin_centers = [(b.left + b.right) / 2 for b in vib_by_flow.index]
     axes[1, 1].plot(bin_centers, vib_by_flow.values, "g.-", linewidth=2)
@@ -273,10 +276,6 @@ if __name__ == "__main__":
         parse_dates=["timestamp"],
         dtype={"asset_id": "category", "flow_m3h": "float32"}
     )
-
-    # # Validate first asset (P-0100, NK 32-125)
-    # asset_df = df[df["asset_id"] == "P-0100"].copy()
-    # run_validation(asset_df, asset_name="P-0100", model_name="NK 32-125")
 
     # Validate all assets
     for asset_id in df["asset_id"].cat.categories:

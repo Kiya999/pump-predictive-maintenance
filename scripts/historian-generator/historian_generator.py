@@ -27,31 +27,25 @@ from datetime import datetime, timedelta
 import sqlite3
 
 from historian_config import (OUTPUT_DIR, CSV_PATH, DB_PATH, FAILURE_SCENARIOS,
-                              UNIT_MISMATCH_ASSET, THERMAL_TAU_MIN, PUMP_CURVES,)
-
-
+                              UNIT_MISMATCH_ASSET, THERMAL_TAU_MIN, PUMP_CURVES,
+                              BASE_TIME, NUM_ASSETS, PERIOD_DAYS, FREQ_MIN,
+                              NOISE_LEVEL, DRIFT_RATE, SEASON_AMP, SEED,
+                              GAP_FRACTION, DUPLICATE_PER_ASSET, AREAS)
 @dataclass
 class HistorianConfig:
-    num_assets: int = 10
-    period_days: int = 365 # Duration of simulation
-    freq_min: int = 1 # Sampling interval
-    noise_level: float = 0.02 # amplitude of random noise (fraction of nominal)
-    drift_rate: float = 0.001 # long‑term drift per day (multiplicative)
-    season_amp: float = 0.3
-    base_time: datetime = field(default_factory=lambda: datetime(2025, 1, 1, 0, 0, 0))
-    seed: int = 42
+    num_assets: int = NUM_ASSETS
+    period_days: int = PERIOD_DAYS
+    freq_min: int = FREQ_MIN
+    noise_level: float = NOISE_LEVEL
+    drift_rate: float = DRIFT_RATE
+    season_amp: float = SEASON_AMP
+    base_time: datetime = field(default_factory=lambda: BASE_TIME)
+    seed: int = SEED
     failure_scenarios: list = field(default_factory=list)
-    # Each element: dict with keys:
-    #    "scenario" (str: "bearing", "cavitation", "insulation"),
-    #    "asset_id" (str),
-    #    "start_day" (int, day offset from base_time),
-    #    "ramp_days" (int, duration of degradation),
-    #    "final_severity" (float, multiplier for signal change)
-
-    gap_fraction: float = 0.001 # approximate fraction of rows to remove
-    duplicate_per_asset: int = 3 # number of duplicate timestamps per asset
-    unit_mismatch_asset: str = UNIT_MISMATCH_ASSET # asset that gets pressure in kPa instead of bar
-    thermal_tau_min: float = THERMAL_TAU_MIN # motor thermal inertia time constant
+    gap_fraction: float = GAP_FRACTION
+    duplicate_per_asset: int = DUPLICATE_PER_ASSET
+    unit_mismatch_asset: str = UNIT_MISMATCH_ASSET
+    thermal_tau_min: float = THERMAL_TAU_MIN
 
     def __post_init__(self):
         assert self.num_assets >= 1, "num_assets must be >= 1"
@@ -205,10 +199,10 @@ def inject_bearing_degradation(signal_vibration, signal_temp, t_days, start_day,
 
     t_rel = (t_days[mask] - start_day) / ramp_days
     t_rel = np.clip(t_rel, 0, 1)
-    
+
     # LINEAR RAMP:
     ramp[mask] = 1.0 + (final_severity - 1.0) * t_rel
-    
+
     # EXPONENTIAL RAMP:
     # ramp[mask] = 1.0 + (final_severity - 1.0) * (np.exp(2 * t_rel) - 1) / (np.exp(2) - 1)
 
@@ -301,11 +295,7 @@ class SyntheticHistorian:
 
     def _assign_area(self, idx):
         """Map asset index to operational area name."""
-        areas = ["Raw_Water_Intake", "Chemical_Dosing", "Filtration",
-                 "Booster_Station_A", "Booster_Station_B", "Wastewater_Lift",
-                 "Effluent_Distribution", "Irrigation_Supply", "Backwash_System",
-                 "High_Lift_Station"]
-        return areas[idx % len(areas)]
+        return AREAS[idx % len(AREAS)]
 
     def generate_asset_data(self, asset):
         """Generate all signals for one asset, apply failure scenarios"""
@@ -325,8 +315,8 @@ class SyntheticHistorian:
             sname = scenario["scenario"]
             start_day = scenario["start_day"]
             ramp_days = scenario["ramp_days"]
-            final_severity = scenario["final_severity"]            
-            
+            final_severity = scenario["final_severity"]
+
             if sname == "bearing":
                 vibration, temp = inject_bearing_degradation(
                     vibration, temp, self.t_days, start_day, ramp_days, final_severity, self.rng)
@@ -415,7 +405,8 @@ class SyntheticHistorian:
                 row = asset_sub.sample(1, random_state=seed_val).copy()
                 # shift timestamp forward by 30-120 seconds (simulate duplicate from buffer)
                 row["timestamp"] = row["timestamp"] + pd.Timedelta(seconds=int(rng.integers(30, 120)))
-                row["timestamp"] = row["timestamp"].clip(upper=self.config.base_time + timedelta(days=self.config.period_days - 1/1440)) # This avoids any rows dated after the last intended minute in the year
+                # Avoid duplicates dated after simulation end:
+                row["timestamp"] = row["timestamp"].clip(upper=self.config.base_time + timedelta(days=self.config.period_days - 1/1440))
                 df = pd.concat([df, row], ignore_index=True)
 
         # Unit mismatch: for specified asset, convert pressure from bar to kPa (multiply by 100)
@@ -428,17 +419,8 @@ class SyntheticHistorian:
         return df
 
 if __name__ == "__main__":
-    config = HistorianConfig(
-        num_assets=10,
-        period_days=365,
-        freq_min=1,
-        noise_level=0.02,
-        drift_rate=0.001,
-        season_amp=0.3,
-        seed=42,
-        failure_scenarios=FAILURE_SCENARIOS,
+    config = HistorianConfig(failure_scenarios=FAILURE_SCENARIOS)
 
-    )
     print("Configuration:")
     print(f"Assets: {config.num_assets}")
     print(f"Period: {config.period_days} days")

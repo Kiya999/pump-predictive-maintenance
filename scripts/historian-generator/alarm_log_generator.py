@@ -1,44 +1,39 @@
 # alarm_log_generator.py
+"""Generate synthetic alarm log for predictive maintenance testing.
+
+Outputs CSV with 10 pump assets x 1 year of alarm events including normal
+background alarms, failure-correlated alarms, and synthetic test cases
+(chattering, stale, cascade) for validation of alarm analysis pipeline.
+
+Note: alarm generation depends on historian configuration and must match historian run for consistency
+"""
+
 import os
 import csv
 import random
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from historian_generator import FAILURE_SCENARIOS
+from historian_config import (FAILURE_SCENARIOS, AREAS, NUM_ASSETS, PERIOD_DAYS,
+                              SEED, BASE_TIME)
+from alarm_log_config import (OUTPUT_DIR, CSV_PATH, NORMAL_ALARMS_PER_ASSET_PER_DAY,
+                              CHATTERING_EVENTS_COUNT, CHATTERING_INTERVAL_MIN,
+                              CHATTERING_DURATION_MIN, STALE_ALARM_DURATION_MIN,
+                              CASCADE_INTERVAL_SEC, OPERATORS, ALARM_TAG_TEMPLATES,
+                              FAILURE_FAMILY_MAP, PRIORITY_DURATION_MEANS,
+                              PRIORITY_DURATION_STDS, CHATTERING_ACK_DELAY_MIN,
+                              STALE_ALARM_ACK_DELAY_MIN, CASCADE_DURATION_MIN,
+                              CASCADE_DURATION_MAX, CASCADE_ACK_DELAY_MIN,
+                              ISA_18_2_ALARMS_PER_ASSET_PER_DAY_MAX)
 
-FIELDS = [
+
+ALARM_FIELDS = [
     "asset_id", "alarm_tag", "alarm_description", "priority", "alarm_type",
     "activation_time", "ack_time", "clear_time", "duration_min",
     "operator_id", "area", "is_test_case"
 ]
 
-ALARM_TAG_TEMPLATES = {
-    "VI_HI":  {"desc": "Pump vibration high",        "priority": 2, "type": "HI", "family": "vibration"},
-    "TI_HI":  {"desc": "Motor temperature high",     "priority": 2, "type": "HI", "family": "temperature"},
-    "FI_LO":  {"desc": "Discharge flow low",         "priority": 3, "type": "LO", "family": "flow"},
-    "PI_HI":  {"desc": "Discharge pressure high",    "priority": 3, "type": "HI", "family": "pressure"},
-    "PI_LO":  {"desc": "Suction pressure low",       "priority": 2, "type": "LO", "family": "pressure"},
-    "PDI_HI": {"desc": "Differential pressure high", "priority": 3, "type": "HI", "family": "pressure"},
-    "II_HI":  {"desc": "Motor current high",         "priority": 2, "type": "HI", "family": "current"},
-    "SI_LO":  {"desc": "Speed low",                  "priority": 4, "type": "LO", "family": "speed"},
-}
-
-FAILURE_FAMILY_MAP = {
-    "bearing":    ["vibration", "temperature"],
-    "cavitation": ["flow", "pressure"],
-    "insulation": ["current", "temperature"],
-}
-
-AREAS = [
-    "Raw_Water_Intake", "Chemical_Dosing", "Filtration",
-    "Booster_Station_A", "Booster_Station_B", "Wastewater_Lift",
-    "Effluent_Distribution", "Irrigation_Supply", "Backwash_System",
-    "High_Lift_Station"
-]
-
-OPS = ["OP01", "OP02", "OP03", "OP04", "OP05"]
-
 def build_assets(num_assets):
+    """Build asset list with alarm tags from tag templates."""
     assets = []
     for i in range(num_assets):
         asset_id = f"P-{(i+1)*100:04d}"
@@ -48,14 +43,15 @@ def build_assets(num_assets):
     return assets
 
 def make_event(asset, t, tag=None, test=False):
+    """Create alarm event record for asset at timestamp t."""
     if tag is None:
         tag = random.choice(asset["tags"])
     suffix = tag.split(".")[-1]
     m = ALARM_TAG_TEMPLATES[suffix]
 
-    # higher priority = shorter duration
-    means = {1: 3, 2: 10, 3: 25, 4: 60}
-    stds  = {1: 1, 2: 4, 3: 10, 4: 30}
+    means = PRIORITY_DURATION_MEANS
+    stds = PRIORITY_DURATION_STDS
+
     priority = m["priority"]
 
     dur = max(0.5, random.gauss(means[priority], stds[priority]))
@@ -75,12 +71,13 @@ def make_event(asset, t, tag=None, test=False):
         "ack_time": (t + timedelta(minutes=ack)).strftime("%Y-%m-%d %H:%M:%S"),
         "clear_time": (t + timedelta(minutes=dur)).strftime("%Y-%m-%d %H:%M:%S"),
         "duration_min": round(dur, 1),
-        "operator_id": random.choice(OPS),
+        "operator_id": random.choice(OPERATORS),
         "area": asset["area"],
         "is_test_case": "YES" if test else ""
     }
 
 def generate_failure_correlated_alarms(assets_by_id, failure_scenarios, start):
+    """Generate alarms correlated with failure scenario timings and signal families"""
     rows = []
     asset_map = {a["asset_id"]: a for a in assets_by_id}
 
@@ -118,13 +115,14 @@ def generate_failure_correlated_alarms(assets_by_id, failure_scenarios, start):
     return rows
 
 if __name__ == "__main__":
-    random.seed(42)
-    start = datetime(2025, 1, 1, 0, 0, 0)
-    ASSETS = build_assets(10)
+    random.seed(SEED)
+    start = BASE_TIME
+    ASSETS = build_assets(NUM_ASSETS)
     rows = []
 
-    # normal events: ~6 alarms per asset per day = 6 * 10 * 365 = 21,900
-    for _ in range(21900):
+    normal_events_count = NORMAL_ALARMS_PER_ASSET_PER_DAY * NUM_ASSETS * PERIOD_DAYS # normal events: ~6 alarms per asset per day = 6 * 10 * 365 = 21,900
+
+    for _ in range(normal_events_count):
         a = random.choice(ASSETS)
         d = random.randint(0, 364)
         h = max(0, min(23, int(random.gauss(14, 6))))
@@ -134,20 +132,20 @@ if __name__ == "__main__":
 
     # chattering: P-0100.VI_HI x7 in ~8 min
     t0 = start + timedelta(days=5, hours=8, minutes=30)
-    for i in range(7):
-        t = t0 + timedelta(minutes=1.2 * i)
+    for i in range(CHATTERING_EVENTS_COUNT):
+        t = t0 + timedelta(minutes=CHATTERING_INTERVAL_MIN * i)
         ev = make_event(ASSETS[0], t, tag="P-0100.VI_HI", test=True)
-        ev["duration_min"] = 0.8
-        ev["ack_time"] = (t + timedelta(minutes=0.6)).strftime("%Y-%m-%d %H:%M:%S")
-        ev["clear_time"] = (t + timedelta(minutes=0.8)).strftime("%Y-%m-%d %H:%M:%S")
+        ev["duration_min"] = CHATTERING_DURATION_MIN
+        ev["ack_time"] = (t + timedelta(minutes=CHATTERING_ACK_DELAY_MIN)).strftime("%Y-%m-%d %H:%M:%S")
+        ev["clear_time"] = (t + timedelta(minutes=CHATTERING_DURATION_MIN)).strftime("%Y-%m-%d %H:%M:%S")
         ev["operator_id"] = "OP01"
         rows.append(ev)
 
     # stale: P-0200.FI_LO never clears
     t0 = start + timedelta(days=10, hours=2)
     ev = make_event(ASSETS[1], t0, tag="P-0200.FI_LO", test=True)
-    ev["duration_min"] = 3120.0
-    ev["ack_time"] = (t0 + timedelta(minutes=4.5)).strftime("%Y-%m-%d %H:%M:%S")
+    ev["duration_min"] = STALE_ALARM_DURATION_MIN
+    ev["ack_time"] = (t0 + timedelta(minutes=STALE_ALARM_ACK_DELAY_MIN)).strftime("%Y-%m-%d %H:%M:%S")
     ev["clear_time"] = ""
     ev["operator_id"] = "OP04"
     rows.append(ev)
@@ -156,11 +154,11 @@ if __name__ == "__main__":
     t0 = start + timedelta(days=15, hours=14, minutes=22, seconds=30)
     batch = ["P-0300.PI_LO", "P-0300.FI_LO", "P-0300.VI_HI", "P-0300.PDI_HI", "P-0300.TI_HI"]
     for i, tag in enumerate(batch):
-        t = t0 + timedelta(seconds=25 * i)
-        dur = random.uniform(3.5, 25.0)
+        t = t0 + timedelta(seconds=CASCADE_INTERVAL_SEC * i)
+        dur = random.uniform(CASCADE_DURATION_MIN, CASCADE_DURATION_MAX)
         ev = make_event(ASSETS[2], t, tag=tag, test=True)
         ev["duration_min"] = round(dur, 1)
-        ev["ack_time"] = (t + timedelta(minutes=0.8)).strftime("%Y-%m-%d %H:%M:%S")
+        ev["ack_time"] = (t + timedelta(minutes=CASCADE_ACK_DELAY_MIN)).strftime("%Y-%m-%d %H:%M:%S")
         ev["clear_time"] = (t + timedelta(minutes=dur)).strftime("%Y-%m-%d %H:%M:%S")
         ev["operator_id"] = "OP05"
         rows.append(ev)
@@ -171,13 +169,10 @@ if __name__ == "__main__":
 
     rows.sort(key=lambda r: r["activation_time"])
 
-    output_folder = "output"
-    os.makedirs(output_folder, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    csv_path = os.path.join(output_folder, "alarm_log.csv")
-
-    with open(csv_path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS)
+    with open(CSV_PATH, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=ALARM_FIELDS)
         w.writeheader()
         for r in rows:
             w.writerow(r)
@@ -197,8 +192,8 @@ if __name__ == "__main__":
     print(f"  Test cases: {sum(1 for r in rows if r['is_test_case'] == 'YES')}")
 
     # ISA-18.2 check: < 1 alarm per 10 min per asset = 144/asset/day max
-    total_asset_days = 10 * 365
+    total_asset_days = NUM_ASSETS * PERIOD_DAYS
     rate = len(rows) / total_asset_days
     print(f"  Mean alarm rate: {rate:.1f} alarms/asset/day")
-    if rate > 144:
+    if rate > ISA_18_2_ALARMS_PER_ASSET_PER_DAY_MAX:
         print("  WARNING: exceeds ISA-18.2 benchmark")
