@@ -1,4 +1,9 @@
 # load_pronostia_bearing.py
+"""
+Load PRONOSTIA bearing dataset from disk, compute RMS progression, identify 
+baseline and acceleration phases, save timeseries and baseline stats CSVs.
+"""
+
 import os
 import sys
 import numpy as np

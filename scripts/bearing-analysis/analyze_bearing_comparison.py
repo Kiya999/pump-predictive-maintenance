@@ -1,4 +1,10 @@
 # analyze_bearing_comparison.py
+"""
+Load synthetic historian P-0100 bearing degradation and PRONOSTIA real bearing 
+failure data, normalize and overlay signals, extract quality reports summary.
+Outputs comparison plot and dataset statistics.
+"""
+
 import os
 import sys
 import json
