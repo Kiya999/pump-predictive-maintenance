@@ -1,8 +1,15 @@
 # pf_alignment.py
+"""
+Generate P-F alignment matrix: failure modes vs detection data sources.
+Outputs CSV and formatted Excel workbook with signal strength ratings
+and P-F lead time estimates.
+"""
+
 import os
 import pandas as pd
 
-os.makedirs("output", exist_ok=True)
+from analytics_config import OUTPUT_DIR, OUTPUT_FILES
+
 
 failure_modes = [
     "Bearing wear (rolling element)",
@@ -195,21 +202,21 @@ pf_lead_times = {
     "Operating far from BEP": "N/A (accelerator)",
 }
 
-
 df = pd.DataFrame(index=failure_modes)
 
 for source in data_sources:
-    df[source] = [matrix_data[mode].get(source, "Unknown") for mode in failure_modes]
+    df[source] = [matrix_data[mode][source] for mode in failure_modes]
 
 df["P-F Lead Time"] = [pf_lead_times[mode] for mode in failure_modes]
 
 df = df.reset_index().rename(columns={"index": "Failure Mode"})
 
-csv_path = "output/pf_alignment_matrix.csv"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+csv_path = os.path.join(OUTPUT_DIR, OUTPUT_FILES["pf_alignment_csv"])
+excel_path = os.path.join(OUTPUT_DIR, OUTPUT_FILES["pf_alignment_excel"])
+
 df.to_csv(csv_path, index=False)
 print(f"CSV saved: {csv_path}")
-
-excel_path = "output/pf_alignment_matrix.xlsx"
 
 with pd.ExcelWriter(excel_path, engine='xlsxwriter') as writer:
     df.to_excel(writer, sheet_name='P-F Alignment Matrix', index=False)

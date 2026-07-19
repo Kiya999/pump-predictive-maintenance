@@ -1,7 +1,13 @@
 # environmental_correlation.py
+"""
+Utilities for environmental correlation: find overlapping timestamps between
+historian and environmental data, compute Pearson correlation on aligned records.
+"""
+
 import pandas as pd
 
-def find_overlap_window(hist_df, env_df, hist_ts_col="timestamp", env_ts_col="timestamp"):
+def find_overlap_window(hist_df, env_df, hist_ts_col, env_ts_col):
+    """Find earliest and latest common timestamps between datasets."""
     hist_ts = set(hist_df[hist_ts_col])
     env_ts = set(env_df[env_ts_col])
     overlap_ts = hist_ts & env_ts
@@ -13,8 +19,8 @@ def find_overlap_window(hist_df, env_df, hist_ts_col="timestamp", env_ts_col="ti
     return overlap_ts[0], overlap_ts[-1], len(overlap_ts)
 
 
-def compute_overlap_correlation(hist_df, env_df, hist_col="flow_m3h", env_col="discharge_cfs",
-                               hist_ts_col="timestamp", env_ts_col="timestamp"):
+def compute_overlap_correlation(hist_df, env_df, hist_col, env_col, hist_ts_col, env_ts_col):
+    """Merge on overlapping timestamps and compute Pearson correlation"""
     overlap_start, overlap_end, overlap_count = find_overlap_window(
         hist_df, env_df, hist_ts_col, env_ts_col
     )
