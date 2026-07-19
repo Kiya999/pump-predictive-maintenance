@@ -1,4 +1,8 @@
-# test_anomaly_detection.py
+# verify_anomaly_detection.py
+"""
+Verify anomaly detection methods on failure scenarios. Generates detailed
+plots showing flag locations, severity scores, and detection lead times.
+"""
 
 import os
 import sys
@@ -8,53 +12,14 @@ from sqlalchemy import create_engine
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from analytics_config import ANOMALY_DETECTION_DIR, DETECTION_METHODS, BASELINE_WINDOW_HOURS, BASELINE_NUM_STD, ETL_PIPELINE_PATH, ANOMALY_DETECTION_NEEDED_COLS, FAILURE_SCENARIOS
 from baseline import BaselineCalculator
 from anomaly_detection import AnomalyDetector
 
-WINDOW_HOURS = 24
-ZSCORE_THRESHOLD = 3.0
-MA_WINDOW_PERIODS = 30
-MA_THRESHOLD = 1.5
-IQR_WINDOW_PERIODS = 1440
-IQR_MULTIPLIER = 1.0
-
-NEEDED_COLS = ["asset_id", "timestamp", "failure_type",
-               "vibration_mm_s", "diff_pressure_bar", "motor_temp_c", "flow_m3h"]
-script_dir = os.path.dirname(os.path.abspath(__file__))
-output_dir = os.path.join(script_dir, "output", "anomaly_detection")
-os.makedirs(output_dir, exist_ok=True)
-
-db_path = os.path.join(script_dir, "..", "etl-pipeline", "output", "etl_pipeline.db")
-
-if not os.path.exists(db_path):
-    print(f"Error: database not found at {db_path}")
-    sys.exit(1)
-
-engine = create_engine(f"sqlite:///{db_path}")
-df = pd.read_sql_table("historian_clean", engine, columns=NEEDED_COLS)
-df["timestamp"] = pd.to_datetime(df["timestamp"])
-df = df.sort_values("timestamp").reset_index(drop=True)
-
-print(f"Loaded {len(df)} records")
-print(f"Columns: {list(df.columns)}")
-print(f"\nfailure_type unique values: {df['failure_type'].unique()}")
-print(f"failure_type value counts:\n{df['failure_type'].value_counts(dropna=False)}")
-
-scenarios = [
-    ("bearing", "vibration_mm_s", "bearing"),
-    ("cavitation", "diff_pressure_bar", "cavitation"),
-    ("insulation", "motor_temp_c", "insulation"),
-]
-
-print(f"\n{'='*70}")
-print("DATA AVAILABILITY CHECK")
-print(f"{'='*70}")
-for scenario_name, signal_col, failure_type in scenarios:
-    count = len(df[df["failure_type"] == failure_type])
-    print(f"{scenario_name}: {count} rows with failure_type='{failure_type}'")
-
+os.makedirs(ANOMALY_DETECTION_DIR, exist_ok=True)
 
 def debug_anomaly_results(method_name, result_dict, signal, pre_failure_idx, post_failure_idx):
+    """Print anomaly detection results: flag counts, severity stats, and lead time."""
     flag = result_dict["flag"]
     severity = result_dict["severity"]
     flag_indices = result_dict.get("flag_indices", np.where(flag.values)[0])
@@ -70,7 +35,7 @@ def debug_anomaly_results(method_name, result_dict, signal, pre_failure_idx, pos
     if len(severity_nonzero) > 0:
         print(f"      Severity - min: {severity_nonzero.min():.4f}, max: {severity_nonzero.max():.4f}, mean: {severity_nonzero.mean():.4f}")
     else:
-        print(f"      Severity - min: 0.0000, max: 0.0000, mean: 0.0000")
+        print("      Severity - min: 0.0000, max: 0.0000, mean: 0.0000")
 
     pct_pre = 100 * flags_pre / pre_failure_idx if pre_failure_idx > 0 else 0
     pct_post = 100 * flags_post / (len(flag) - post_failure_idx) if (len(flag) - post_failure_idx) > 0 else 0
@@ -92,9 +57,11 @@ def debug_anomaly_results(method_name, result_dict, signal, pre_failure_idx, pos
             lag_hours = (first_flag - pre_failure_idx) / 60
             print(f"      First flag: {lag_hours:.1f} hours AFTER failure (index {first_flag})")
     else:
-        print(f"      First flag: no anomalies detected")
+        print("      First flag: no anomalies detected")
 
-def detect_on_scenario(scenario_name, signal_col, failure_type):
+
+def detect_on_scenario(scenario_name, signal_col, failure_type, df):
+    """Run anomaly detection on a failure scenario and generate comparison plot."""
     print(f"\n  Processing {scenario_name}...")
 
     all_rows_with_failure_type = df[df["failure_type"] == failure_type]
@@ -144,11 +111,11 @@ def detect_on_scenario(scenario_name, signal_col, failure_type):
     print(f"      Signal training - min: {train_signal.min():.4f}, max: {train_signal.max():.4f}, mean: {train_signal.mean():.4f}")
 
     calc = BaselineCalculator(train_signal, training_flow=train_flow, training_timestamps=train_ts)
-    calc.fit_rolling(window_hours=WINDOW_HOURS)
+    calc.fit_rolling(window_hours=BASELINE_WINDOW_HOURS)
     calc.fit_hourly()
     calc.fit_state()
 
-    baseline_result = calc.apply_hourly(timestamps, signal, num_std=3)
+    baseline_result = calc.apply_hourly(timestamps, signal, num_std=BASELINE_NUM_STD)
 
     print("    Baseline computed")
     print(f"      Baseline - min: {baseline_result['baseline'].min():.4f}, max: {baseline_result['baseline'].max():.4f}")
@@ -157,13 +124,13 @@ def detect_on_scenario(scenario_name, signal_col, failure_type):
     detector = AnomalyDetector(baseline_result)
 
     print("    Running anomaly detection methods...")
-    zscore_result = detector.zscore(signal, threshold=ZSCORE_THRESHOLD)
+    zscore_result = detector.zscore(signal, threshold=DETECTION_METHODS["Z-score"]["threshold"])
     zscore_result["flag_indices"] = np.where(zscore_result["flag"].values)[0]
 
-    iqr_result = detector.iqr(signal, window_periods=IQR_WINDOW_PERIODS, multiplier=IQR_MULTIPLIER)
+    iqr_result = detector.iqr(signal, window_periods=DETECTION_METHODS["IQR"]["window_periods"], multiplier=DETECTION_METHODS["IQR"]["multiplier"])
     iqr_result["flag_indices"] = np.where(iqr_result["flag"].values)[0]
 
-    ma_result = detector.moving_average(signal, window_periods=MA_WINDOW_PERIODS, threshold=MA_THRESHOLD)
+    ma_result = detector.moving_average(signal, window_periods=DETECTION_METHODS["Moving avg"]["window_periods"], threshold=DETECTION_METHODS["Moving avg"]["threshold"])
     ma_result["flag_indices"] = np.where(ma_result["flag"].values)[0]
 
     debug_anomaly_results("Z-score", zscore_result, signal, failure_idx, failure_idx)
@@ -227,19 +194,42 @@ def detect_on_scenario(scenario_name, signal_col, failure_type):
         title=f"{scenario_name}: {asset_id} (failure at index {failure_idx})"
     )
 
-    filename = os.path.join(output_dir, f"{scenario_name}_{asset_id}.html")
+    filename = os.path.join(ANOMALY_DETECTION_DIR, f"{scenario_name}_{asset_id}.html")
     fig.write_html(filename)
     print(f"    Plot saved: {filename}")
 
+
+# Main block
+
+if not os.path.exists(ETL_PIPELINE_PATH):
+    print(f"Error: database not found at {ETL_PIPELINE_PATH}")
+    sys.exit(1)
+
+engine = create_engine(f"sqlite:///{ETL_PIPELINE_PATH}")
+df = pd.read_sql_table("historian_clean", engine, columns=ANOMALY_DETECTION_NEEDED_COLS)
+df["timestamp"] = pd.to_datetime(df["timestamp"])
+df = df.sort_values("timestamp").reset_index(drop=True)
+
+print(f"Loaded {len(df)} records")
+print(f"Columns: {list(df.columns)}")
+print(f"\nfailure_type unique values: {df['failure_type'].unique()}")
+print(f"failure_type value counts:\n{df['failure_type'].value_counts(dropna=False)}")
+
+print(f"\n{'='*70}")
+print("DATA AVAILABILITY CHECK")
+print(f"{'='*70}")
+for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
+    count = len(df[df["failure_type"] == failure_type])
+    print(f"{scenario_name}: {count} rows with failure_type='{failure_type}'")
 
 print(f"\n{'='*70}")
 print("ANOMALY DETECTION ON FAILURE SCENARIOS")
 print(f"{'='*70}")
 
-for scenario_name, signal_col, failure_type in scenarios:
-    detect_on_scenario(scenario_name, signal_col, failure_type)
+for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
+    detect_on_scenario(scenario_name, signal_col, failure_type, df)
 
 print(f"\n{'='*70}")
 print("ANOMALY DETECTION VALIDATION COMPLETE")
 print(f"{'='*70}")
-print(f"Output plots saved to: {output_dir}")
+print(f"Output plots saved to: {ANOMALY_DETECTION_DIR}")
