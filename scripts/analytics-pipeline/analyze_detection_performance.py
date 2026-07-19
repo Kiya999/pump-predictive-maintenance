@@ -1,4 +1,9 @@
 # analyze_detection_performance.py
+"""
+Analyze detection lead times, false positive rates, and trend significance
+for three failure scenarios. Computes lead times vs P-F intervals, FP rates
+on healthy assets, seasonal baseline mismatch, and Mann-Kendall trends.
+"""
 
 import os
 import sys
@@ -11,82 +16,38 @@ import plotly.graph_objects as go
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from baseline import BaselineCalculator
 from anomaly_detection import AnomalyDetector
+from analytics_config import (
+    DETECTION_PERFORMANCE_DIR, TREND_OUTPUT_DIR, ETL_PIPELINE_PATH,
+    DETECTION_METHODS, HISTORIAN_NEEDED_COLS_DETECTION,
+    BASELINE_NUM_STD, BASELINE_TRAINING_FRACTION,
+    PERSISTENCE_MIN_DURATION_HOURS, PERSISTENCE_THRESHOLD, SAMPLING_FREQ_MINUTES,
+    MANN_KENDALL_ALPHA, MAX_TREND_WINDOW, TREND_ANALYSIS_WINDOWS_HOURS,
+    MAX_HEALTHY_ASSETS, MAX_SEASONAL_ANALYSIS_ASSETS, DOWNSAMPLE_FACTOR,
+    PF_INTERVALS_HOURS, RAMP_INFO_DAYS, FAILURE_SCENARIOS, HEALTHY_SIGNAL_COLS,
+    FAILURE_TYPE_HEALTHY_VARIANTS, ANALYSIS_TABLE, ANALYSIS_OUTPUT_FILES,
+    MIN_TRAINING_HOURS, ANOMALY_ROLLING_PLOT_WINDOW_HOURS, TREND_HTML_TEMPLATE,
+)
 
-# from historian generator configuration
-PF_INTERVALS_HOURS = {
-    "bearing": 260 * 24,
-    "cavitation": 60 * 24,
-    "insulation": 120 * 24,
-}
+MIN_TRAINING_SAMPLES = int(MIN_TRAINING_HOURS * 60 / SAMPLING_FREQ_MINUTES)
+PLOT_ROLLING_WINDOW = int(ANOMALY_ROLLING_PLOT_WINDOW_HOURS * 60 / SAMPLING_FREQ_MINUTES)
 
-RAMP_INFO_DAYS = {
-    "bearing": {"start_day": 100, "ramp_days": 260},
-    "cavitation": {"start_day": 200, "ramp_days": 60},
-    "insulation": {"start_day": 150, "ramp_days": 120},
-}
+os.makedirs(DETECTION_PERFORMANCE_DIR, exist_ok=True)
+os.makedirs(TREND_OUTPUT_DIR, exist_ok=True)
 
-FAILURE_SCENARIOS = [
-    ("bearing", "vibration_mm_s", "bearing"),
-    ("cavitation", "diff_pressure_bar", "cavitation"),
-    ("insulation", "motor_temp_c", "insulation"),
-]
-
-## Study guide default values:
-DETECTION_METHODS = {
-    "Z-score": {"threshold": 3.0},
-    "IQR": {"window_periods": 1440, "multiplier": 1.0},
-    "Moving avg": {"window_periods": 30, "threshold": 1.5},
-}
-BASELINE_TRAINING_FRACTION = 0.3
-
-# ## another setting:
-# DETECTION_METHODS = {
-#     "Z-score": {"threshold": 2.0},
-#     "IQR": {"window_periods": 1440, "multiplier": 1.5},
-#     "Moving avg": {"window_periods": 30, "threshold": 2.5},
-# }
-# BASELINE_TRAINING_FRACTION = 0.5  # First 6 months
-
-PERSISTENCE_MIN_DURATION_HOURS = 6
-PERSISTENCE_THRESHOLD = 0.7 # 70% of windows must have flags
-SAMPLING_FREQ_MINUTES = 1
-
-MANN_KENDALL_ALPHA = 0.05 # (p < 0.05 = significant)
-MAX_TREND_WINDOW = 10000 # Cap window size to prevent RAM explosion
-TREND_ANALYSIS_WINDOWS_HOURS = [72, 168]
-
-MAX_HEALTHY_ASSETS = 5 # Analyze FP rates on first N healthy assets
-MAX_SEASONAL_ANALYSIS_ASSETS = 1 # Show seasonal breakdown for first N assets
-
-DOWNSAMPLE_FACTOR = 60 # Plot every Nth sample
-
-# Signal columns to analyze for false positives
-HEALTHY_SIGNAL_COLS = ["vibration_mm_s", "motor_temp_c", "diff_pressure_bar"]
-
-script_dir = os.path.dirname(os.path.abspath(__file__))
-output_base = os.path.join(script_dir, "output", "detection_performance")
-trend_output = os.path.join(output_base, "trend_detection")
-os.makedirs(output_base, exist_ok=True)
-os.makedirs(trend_output, exist_ok=True)
-
-db_path = os.path.join(script_dir, "..", "etl-pipeline", "output", "etl_pipeline.db")
-if not os.path.exists(db_path):
-    print(f"Error: database not found at {db_path}")
+if not os.path.exists(ETL_PIPELINE_PATH):
+    print(f"Error: database not found at {ETL_PIPELINE_PATH}")
     sys.exit(1)
 
-engine = create_engine(f"sqlite:///{db_path}")
+engine = create_engine(f"sqlite:///{ETL_PIPELINE_PATH}")
 
-NEEDED_COLS = ["asset_id", "timestamp", "failure_type",
-               "vibration_mm_s", "diff_pressure_bar", "motor_temp_c", "flow_m3h"]
-
-df = pd.read_sql_table("historian_clean", engine, columns=NEEDED_COLS)
+df = pd.read_sql_table(ANALYSIS_TABLE, engine, columns=HISTORIAN_NEEDED_COLS_DETECTION)
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 df = df.sort_values("timestamp").reset_index(drop=True)
 
 print(f"Loaded {len(df)} records")
 print(f"Columns loaded: {list(df.columns)}")
 print(f"Memory usage: {df.memory_usage(deep=True).sum() / 1e6:.1f} MB")
-print(f"Database: {db_path}\n")
+print(f"Database: {ETL_PIPELINE_PATH}\n")
 
 # PART 1: DETECTION LEAD TIME ANALYSIS
 
@@ -115,26 +76,28 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
         print(f"  Skip: column '{signal_col}' not found")
         continue
 
-    failure_mask = df_asset["failure_type"] != "none"
+    failure_mask = (df_asset["failure_type"].notna() & ~df_asset["failure_type"].isin(FAILURE_TYPE_HEALTHY_VARIANTS))
+
     if not failure_mask.any():
         print("  Skip: no failure point found")
         continue
 
-    onset_idx = failure_mask.idxmax()
+    onset_idx = np.where(failure_mask)[0][0]
 
-    ramp_info = RAMP_INFO_DAYS.get(failure_type)
-    if ramp_info is None:
+    if failure_type not in RAMP_INFO_DAYS:
         print(f"  Skip: no ramp info for '{failure_type}'")
         continue
+    ramp_info = RAMP_INFO_DAYS[failure_type]
 
     true_failure_day = ramp_info["start_day"] + ramp_info["ramp_days"]
     true_failure_ts = df_asset["timestamp"].iloc[0] + pd.Timedelta(days=true_failure_day)
+
     post_true_failure = df_asset["timestamp"] >= true_failure_ts
     if not post_true_failure.any():
         print(f"  Skip: ramp end (day {true_failure_day}) beyond available data")
         continue
 
-    failure_idx = post_true_failure.idxmax()
+    failure_idx = np.where(post_true_failure)[0][0]
 
     print(f"  Ramp onset index: {onset_idx} ({100.0*onset_idx/len(df_asset):.1f}% into timeline)")
     print(f"  True failure index (ramp end): {failure_idx} ({100.0*failure_idx/len(df_asset):.1f}% into timeline)")
@@ -147,20 +110,24 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
     train_flow = flow.iloc[:onset_idx]
     train_ts = timestamps.iloc[:onset_idx]
 
-    if len(train_signal) < 1440:
-        print(f"  Skip: insufficient training data ({len(train_signal)} < 1440)")
+    if len(train_signal) < MIN_TRAINING_SAMPLES:
+        print(f"  Skip: insufficient training data ({len(train_signal)} < {MIN_TRAINING_SAMPLES})")
         continue
 
     try:
         calc = BaselineCalculator(train_signal, training_flow=train_flow, training_timestamps=train_ts)
         calc.fit_hourly()
-        baseline_result = calc.apply_hourly(timestamps, signal, num_std=3)
+        baseline_result = calc.apply_hourly(timestamps, signal, num_std=BASELINE_NUM_STD)
         print(f"  Baseline: fitted on {len(train_signal)} pre-failure samples")
     except Exception as e:
         print(f"  Skip: baseline fit failed: {e}")
         continue
 
-    pf_hours = PF_INTERVALS_HOURS.get(failure_type)
+    if failure_type not in PF_INTERVALS_HOURS:
+        print(f"  Skip: no PF interval for '{failure_type}'")
+        continue
+    pf_hours = PF_INTERVALS_HOURS[failure_type]
+
     print(f"  P-F interval: {pf_hours} hours\n")
 
     detector = AnomalyDetector(baseline_result)
@@ -177,7 +144,7 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
         flags = result["flag"]
         flags_post_onset = flags.iloc[onset_idx:]
 
-        first_persistent_rel, _ = AnomalyDetector.persistent_detection(
+        first_persistent_rel = AnomalyDetector.persistent_detection(
             flags_post_onset.values,
             min_duration_hours=PERSISTENCE_MIN_DURATION_HOURS,
             persistence_threshold=PERSISTENCE_THRESHOLD,
@@ -191,7 +158,7 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
                 first_detection_indices[scenario_name] = first_persistent
 
 
-            lead_hours = AnomalyDetector.lead_time_hours(first_persistent, failure_idx, sampling_freq_minutes=1)
+            lead_hours = AnomalyDetector.lead_time_hours(first_persistent, failure_idx, sampling_freq_minutes=SAMPLING_FREQ_MINUTES)
             lead_pct = 100.0 * lead_hours / pf_hours if pf_hours else None
 
             if lead_pct is not None and lead_pct > 100.0:
@@ -232,8 +199,8 @@ if lead_time_results:
 
     pivot_pct = results_df.pivot_table(index="Scenario", columns="Method", values="% of P-F interval", aggfunc="first").reindex(columns=col_order)
 
-    pivot_hours.to_csv(os.path.join(output_base, "lead_times.csv"))
-    pivot_pct.to_csv(os.path.join(output_base, "lead_times_percent_pf.csv"))
+    pivot_hours.to_csv(os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["lead_times"]))
+    pivot_pct.to_csv(os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["lead_times_percent_pf"]))
 
     print(f"\n{'='*70}")
     print("DETECTION LEAD TIMES (hours)")
@@ -246,8 +213,8 @@ if lead_time_results:
     print(pivot_pct.to_string())
 
     print("\nSaved to:")
-    print(f"  {os.path.join(output_base, 'lead_times.csv')}")
-    print(f"  {os.path.join(output_base, 'lead_times_percent_pf.csv')}")
+    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, 'lead_times.csv')}")
+    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, 'lead_times_percent_pf.csv')}")
 else:
     print("Warning: no lead time results collected")
 
@@ -260,7 +227,8 @@ print(f"{'='*70}\n")
 all_assets = df["asset_id"].unique()
 healthy_assets = [
     aid for aid in all_assets
-    if set(df[df["asset_id"] == aid]["failure_type"].unique()) == {"none"}
+    if set(df[df["asset_id"] == aid]["failure_type"].dropna().unique())
+    .issubset(set(FAILURE_TYPE_HEALTHY_VARIANTS))
 ]
 
 print(f"Found {len(healthy_assets)} healthy assets: {healthy_assets}\n")
@@ -270,15 +238,17 @@ fp_results = []
 for asset_id in healthy_assets[:MAX_HEALTHY_ASSETS]:
     print(f"Processing {asset_id}...")
 
-    df_asset = df[df["asset_id"] == asset_id][["timestamp", "flow_m3h"] + HEALTHY_SIGNAL_COLS].reset_index(drop=True)
+    asset_columns = ["timestamp", "flow_m3h"] + HEALTHY_SIGNAL_COLS
+    missing_signals = [c for c in asset_columns if c not in df.columns]
 
-    if len(df_asset) < 1440:
-        print(f"  Skip: insufficient data ({len(df_asset)} < 1440 samples)")
+    if missing_signals:
+        print(f"  Skip: missing columns {missing_signals}")
         continue
 
-    missing_signals = [c for c in HEALTHY_SIGNAL_COLS if c not in df_asset.columns]
-    if missing_signals:
-        print(f"  Skip: missing signals {missing_signals}")
+    df_asset = df[df["asset_id"] == asset_id][asset_columns].reset_index(drop=True)
+
+    if len(df_asset) < MIN_TRAINING_SAMPLES:
+        print(f"  Skip: insufficient data ({len(df_asset)} < {MIN_TRAINING_SAMPLES} samples)")
         continue
 
     timestamps = pd.to_datetime(df_asset["timestamp"])
@@ -296,14 +266,14 @@ for asset_id in healthy_assets[:MAX_HEALTHY_ASSETS]:
         train_flow = flow.iloc[:train_idx]
         train_ts = timestamps.iloc[:train_idx]
 
-        if len(train_signal) < 1440:
-            print(f"    {signal_col}: skip, insufficient training data ({len(train_signal)} < 1440)")
+        if len(train_signal) < MIN_TRAINING_SAMPLES:
+            print(f"    {signal_col}: skip, insufficient training data ({len(train_signal)} < {MIN_TRAINING_SAMPLES})")
             continue
 
         try:
             calc = BaselineCalculator(train_signal, training_flow=train_flow, training_timestamps=train_ts)
             calc.fit_hourly()
-            baseline_result = calc.apply_hourly(timestamps, signal, num_std=3)
+            baseline_result = calc.apply_hourly(timestamps, signal, num_std=BASELINE_NUM_STD)
         except Exception as e:
             print(f"    {signal_col}: skip, baseline fit failed: {e}")
             continue
@@ -367,9 +337,9 @@ if fp_results:
         "Moving avg FP rate (%)": "mean",
     }).round(2)
 
-    fp_df.to_csv(os.path.join(output_base, "false_positives_monthly.csv"), index=False)
-    monthly_summary.to_csv(os.path.join(output_base, "false_positives_by_signal_month.csv"))
-    asset_signal_summary.to_csv(os.path.join(output_base, "false_positives_by_asset_signal.csv"))
+    fp_df.to_csv(os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["false_positives_monthly"]), index=False)
+    monthly_summary.to_csv(os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["false_positives_by_signal_month"]))
+    asset_signal_summary.to_csv(os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["false_positives_by_asset_signal"]))
 
     print(f"\n{'='*70}")
     print("FALSE POSITIVE SUMMARY (healthy assets only)")
@@ -380,9 +350,9 @@ if fp_results:
     print(asset_signal_summary.to_string())
 
     print("\nSaved to:")
-    print(f"  {os.path.join(output_base, 'false_positives_monthly.csv')}")
-    print(f"  {os.path.join(output_base, 'false_positives_by_signal_month.csv')}")
-    print(f"  {os.path.join(output_base, 'false_positives_by_asset_signal.csv')}")
+    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, 'false_positives_monthly.csv')}")
+    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, 'false_positives_by_signal_month.csv')}")
+    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, 'false_positives_by_asset_signal.csv')}")
 
     # ROOT CAUSE ANALYSIS
     print(f"\n{'='*70}")
@@ -464,201 +434,210 @@ else:
         timestamps = df_bearing["timestamp"]
 
         # Find onset (first non-none)
-        failure_mask_b = df_bearing["failure_type"] != "none"
+        failure_mask_b = (df_bearing["failure_type"].notna() & ~df_bearing["failure_type"].isin(FAILURE_TYPE_HEALTHY_VARIANTS))
+
         if not failure_mask_b.any():
             print("Warning: no failure point in bearing asset")
         else:
-            onset_idx = failure_mask_b.idxmax()
+            onset_idx = np.where(failure_mask_b)[0][0]
 
             # Calculate true failure (ramp end) same as Part 1
-            ramp_info = RAMP_INFO_DAYS.get("bearing")
-            if ramp_info is None:
+            if "bearing" not in RAMP_INFO_DAYS:
                 print("Warning: no ramp info for bearing, skipping trend analysis")
             else:
+                ramp_info = RAMP_INFO_DAYS["bearing"]
                 true_failure_day = ramp_info["start_day"] + ramp_info["ramp_days"]
                 true_failure_ts = df_bearing["timestamp"].iloc[0] + pd.Timedelta(days=true_failure_day)
                 post_true_failure = df_bearing["timestamp"] >= true_failure_ts
+
                 if not post_true_failure.any():
                     print("Warning: ramp end beyond available data, skipping trend analysis")
                 else:
-                    failure_idx = post_true_failure.idxmax()
+                    failure_idx = np.where(post_true_failure)[0][0]
+                    failure_time = timestamps.iloc[failure_idx]
 
-            failure_time = timestamps.iloc[failure_idx]
-            # failure_time_str = failure_time.isoformat()
-            failure_pct = 100.0 * failure_idx / len(df_bearing)
+                    failure_pct = 100.0 * failure_idx / len(df_bearing)
 
-            print(f"Failure onset: index {failure_idx} ({failure_pct:.1f}% into timeline)")
-            print(f"Total samples: {len(df_bearing)}\n")
+                    print(f"True failure index: {failure_idx} ({failure_pct:.1f}% into timeline)")
+                    print(f"Total samples: {len(df_bearing)}\n")
 
-            print("Mann-Kendall Trend Analysis:\n")
+                    print("Mann-Kendall Trend Analysis:\n")
 
-            # Cap maximum window to avoid RAM explosion
-            FIRST_BEARING_DETECTION_IDX = first_detection_indices.get("bearing")
+                    # Cap maximum window to avoid RAM explosion
+                    if "bearing" not in first_detection_indices:
+                        print("  Warning: no IQR detection index from Part 1, skipping centered trend window")
+                    else:
+                        FIRST_BEARING_DETECTION_IDX = first_detection_indices["bearing"]
 
-            if FIRST_BEARING_DETECTION_IDX is None:
-                print("  Warning: no IQR detection index from Part 1, skipping centered trend window")
-            else:
-                half = MAX_TREND_WINDOW // 2
-                start = max(0, FIRST_BEARING_DETECTION_IDX - half)
-                end   = min(failure_idx, FIRST_BEARING_DETECTION_IDX + half)
-                window_hours_actual = (end - start) / 60.0
+                        half = MAX_TREND_WINDOW // 2
+                        start = max(0, FIRST_BEARING_DETECTION_IDX - half)
+                        end   = min(failure_idx, FIRST_BEARING_DETECTION_IDX + half)
+                        window_hours_actual = ((end - start) * SAMPLING_FREQ_MINUTES / 60.0)
+                        trend_window_signal = signal.iloc[start:end]
 
-                trend_window_signal = signal.iloc[start:end]
+                        trend_dir_full, p_val_full, slope_full, sig_full = AnomalyDetector.detect_trend(
+                            trend_window_signal, window_hours=(len(trend_window_signal) * SAMPLING_FREQ_MINUTES / 60.0),
+                            sampling_freq_minutes=SAMPLING_FREQ_MINUTES, alpha=MANN_KENDALL_ALPHA
+                        )
 
-                trend_dir_full, p_val_full, slope_full, sig_full = AnomalyDetector.detect_trend(
-                    trend_window_signal, window_hours=len(trend_window_signal) / 60.0, alpha=MANN_KENDALL_ALPHA
-                )
+                        sig_str_full = "SIGNIFICANT" if sig_full else "not significant"
+                        p_str_full = f"{p_val_full:.6f}" if p_val_full is not None else "N/A"
+                        slope_str_full = f"{slope_full:.8f}" if slope_full is not None else "N/A"
+                        print(f"  Pre-failure window centered on first detection ({window_hours_actual:.1f}h, idx {start}-{end}): trend={trend_dir_full} (p={p_str_full} slope={slope_str_full}) {sig_str_full}")
 
-                sig_str_full = "SIGNIFICANT" if sig_full else "not significant"
-                p_str_full = f"{p_val_full:.6f}" if p_val_full is not None else "N/A"
-                slope_str_full = f"{slope_full:.8f}" if slope_full is not None else "N/A"
-                print(f"  Pre-failure window centered on first detection ({window_hours_actual:.1f}h, idx {start}-{end}): trend={trend_dir_full} (p={p_str_full} slope={slope_str_full}) {sig_str_full}")
+                        # Trailing windows
+                        window_labels = ", ".join(f"{hours}h" for hours in TREND_ANALYSIS_WINDOWS_HOURS)
+                        print(f"\nTrailing windows ({window_labels} of pre-failure):")
 
-                # Trailing windows
-                print("\nTrailing windows (last 72h and 168h of pre-failure):")
-                trend_results = {}
-                trend_csv_results = [{
-                    "Window hours": window_hours_actual,
-                    "Window type": "full (capped)",
-                    "Trend direction": trend_dir_full,
-                    "P-value": p_val_full,
-                    "Slope": slope_full,
-                    f"Significant (alpha={MANN_KENDALL_ALPHA})": sig_full,
-                }]
+                        trend_results = {}
+                        trend_csv_results = [{
+                            "Window hours": window_hours_actual,
+                            "Window type": "full (capped)",
+                            "Trend direction": trend_dir_full,
+                            "P-value": p_val_full,
+                            "Slope": slope_full,
+                            f"Significant (alpha={MANN_KENDALL_ALPHA})": sig_full,
+                        }]
 
-                for window_hours in TREND_ANALYSIS_WINDOWS_HOURS:
-                    trend_dir, p_val, slope, significant = AnomalyDetector.detect_trend(
-                        signal.iloc[:failure_idx], window_hours=window_hours, alpha=MANN_KENDALL_ALPHA
-                    )
-                    sig_str = "SIGNIFICANT" if significant else "not significant"
-                    p_str = f"{p_val:.6f}" if p_val is not None else "N/A"
-                    slope_str = f"{slope:.8f}" if slope is not None else "N/A"
-                    print(f"  {window_hours:3d}h window: trend={trend_dir:12s} (p={p_str} slope={slope_str}) {sig_str}")
-                    trend_results[window_hours] = (trend_dir, p_val, slope, significant)
-                    trend_csv_results.append({
-                        "Window hours": window_hours,
-                        "Window type": "trailing",
-                        "Trend direction": trend_dir,
-                        "P-value": p_val,
-                        "Slope": slope,
-                        f"Significant (alpha={MANN_KENDALL_ALPHA})": significant,
-                    })
-
-                trend_csv_df = pd.DataFrame(trend_csv_results)
-                trend_csv_path = os.path.join(output_base, "trend_detection_results.csv")
-                trend_csv_df.to_csv(trend_csv_path, index=False)
-                print(f"\nTrend results saved to: {trend_csv_path}")
-
-                # Plots
-                rolling_mean = signal.rolling(window=1440).mean()
-
-                train_signal_b = signal.iloc[:failure_idx]
-                flow_b = df_bearing["flow_m3h"].fillna(df_bearing["flow_m3h"].mean())
-                train_flow_b = flow_b.iloc[:failure_idx]
-                train_ts_b = timestamps.iloc[:failure_idx]
-
-                has_flags = False
-                first_iqr_time = None
-                zscore_flags = None
-                iqr_flags = None
-
-                try:
-                    calc_b = BaselineCalculator(train_signal_b, training_flow=train_flow_b, training_timestamps=train_ts_b)
-                    calc_b.fit_hourly()
-                    baseline_b = calc_b.apply_hourly(timestamps, signal, num_std=3)
-                    detector_b = AnomalyDetector(baseline_b)
-                    zscore_result = detector_b.zscore(signal,threshold=DETECTION_METHODS["Z-score"]["threshold"])
-                    iqr_result = detector_b.iqr(signal,window_periods=DETECTION_METHODS["IQR"]["window_periods"],
-                                                multiplier=DETECTION_METHODS["IQR"]["multiplier"])
-                    zscore_flags = zscore_result["flag"]
-                    iqr_flags = iqr_result["flag"]
-
-                    # Find first persistent IQR detection post-failure (avoid pre-failure spurious flags)
-                    iqr_flags_post_failure = iqr_flags.iloc[failure_idx:]
-                    first_iqr_rel, _ = AnomalyDetector.persistent_detection(
-                        iqr_flags_post_failure.values, min_duration_hours=PERSISTENCE_MIN_DURATION_HOURS,
-                        persistence_threshold=PERSISTENCE_THRESHOLD, sampling_freq_minutes=SAMPLING_FREQ_MINUTES
-                    )
-                    first_iqr = (failure_idx + first_iqr_rel) if first_iqr_rel is not None else None
-                    first_iqr_time = timestamps.iloc[first_iqr] if first_iqr is not None else None
-
-                    has_flags = True
-
-                except Exception as e:
-                    print(f"  Warning: could not compute flags for trend plot: {e}")
-                    has_flags = False
-
-                # downsampled versions for visualization only
-                signal_plot = signal.iloc[::DOWNSAMPLE_FACTOR]
-                timestamps_plot = timestamps.iloc[::DOWNSAMPLE_FACTOR]
-                rolling_mean_plot = rolling_mean.iloc[::DOWNSAMPLE_FACTOR]
-                iqr_flags_plot = iqr_flags.iloc[::DOWNSAMPLE_FACTOR] if iqr_flags is not None else None
-                zscore_flags_plot = zscore_flags.iloc[::DOWNSAMPLE_FACTOR] if zscore_flags is not None else None
-
-                for window_hours in TREND_ANALYSIS_WINDOWS_HOURS:
-                    fig = go.Figure()
-
-                    fig.add_trace(go.Scatter(
-                        x=timestamps_plot, y=signal_plot.values, mode="lines",
-                        name="Vibration (raw)", line=dict(color="steelblue", width=1)
-                    ))
-
-                    fig.add_trace(go.Scatter(
-                        x=timestamps_plot, y=rolling_mean_plot.values, mode="lines",
-                        name="24h rolling mean", line=dict(color="red", width=2, dash="dash")
-                    ))
-
-                    if has_flags and iqr_flags_plot is not None:
-                        flag_mask = iqr_flags_plot.values == 1
-                        if flag_mask.any():
-                            fig.add_trace(go.Scatter(
-                                x=timestamps_plot.values[flag_mask], y=signal_plot.values[flag_mask],
-                                mode="markers", name="IQR anomaly flag",
-                                marker=dict(color="orange", size=4, opacity=0.6)
-                            ))
-
-                        if first_iqr_time:
-                            fig.add_vline(
-                                x=first_iqr_time, line_dash="dot",
-                                line_color="orange", line_width=2,
+                        for window_hours in TREND_ANALYSIS_WINDOWS_HOURS:
+                            trend_dir, p_val, slope, significant = AnomalyDetector.detect_trend(
+                                signal.iloc[:failure_idx], window_hours=window_hours,
+                                sampling_freq_minutes=SAMPLING_FREQ_MINUTES, alpha=MANN_KENDALL_ALPHA
                             )
 
-                    if has_flags and zscore_flags_plot is not None:
-                        zscore_mask = zscore_flags_plot.values == 1
-                        if zscore_mask.any():
+                            sig_str = "SIGNIFICANT" if significant else "not significant"
+                            p_str = f"{p_val:.6f}" if p_val is not None else "N/A"
+                            slope_str = f"{slope:.8f}" if slope is not None else "N/A"
+                            print(f"  {window_hours:3d}h window: trend={trend_dir:12s} (p={p_str} slope={slope_str}) {sig_str}")
+                            trend_results[window_hours] = (trend_dir, p_val, slope, significant)
+                            trend_csv_results.append({
+                                "Window hours": window_hours,
+                                "Window type": "trailing",
+                                "Trend direction": trend_dir,
+                                "P-value": p_val,
+                                "Slope": slope,
+                                f"Significant (alpha={MANN_KENDALL_ALPHA})": significant,
+                            })
+
+                        trend_csv_df = pd.DataFrame(trend_csv_results)
+                        trend_csv_path = os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["trend_detection_results"])
+                        trend_csv_df.to_csv(trend_csv_path, index=False)
+                        print(f"\nTrend results saved to: {trend_csv_path}")
+
+                        # Plots
+                        rolling_mean = signal.rolling(window=PLOT_ROLLING_WINDOW).mean()
+
+                        train_signal_b = signal.iloc[:failure_idx]
+                        flow_b = df_bearing["flow_m3h"].fillna(df_bearing["flow_m3h"].mean())
+                        train_flow_b = flow_b.iloc[:failure_idx]
+                        train_ts_b = timestamps.iloc[:failure_idx]
+
+                        has_flags = False
+                        first_iqr_time = None
+                        zscore_flags = None
+                        iqr_flags = None
+
+                        try:
+                            calc_b = BaselineCalculator(train_signal_b, training_flow=train_flow_b, training_timestamps=train_ts_b)
+                            calc_b.fit_hourly()
+                            baseline_b = calc_b.apply_hourly(timestamps, signal, num_std=BASELINE_NUM_STD)
+                            detector_b = AnomalyDetector(baseline_b)
+                            zscore_result = detector_b.zscore(signal,threshold=DETECTION_METHODS["Z-score"]["threshold"])
+                            iqr_result = detector_b.iqr(signal,window_periods=DETECTION_METHODS["IQR"]["window_periods"],
+                                                        multiplier=DETECTION_METHODS["IQR"]["multiplier"])
+                            zscore_flags = zscore_result["flag"]
+                            iqr_flags = iqr_result["flag"]
+
+                            # Find first persistent IQR detection post-failure (avoid pre-failure spurious flags)
+                            iqr_flags_post_failure = iqr_flags.iloc[failure_idx:]
+                            first_iqr_rel = AnomalyDetector.persistent_detection(
+                                iqr_flags_post_failure.values, min_duration_hours=PERSISTENCE_MIN_DURATION_HOURS,
+                                persistence_threshold=PERSISTENCE_THRESHOLD, sampling_freq_minutes=SAMPLING_FREQ_MINUTES
+                            )
+                            first_iqr = (failure_idx + first_iqr_rel) if first_iqr_rel is not None else None
+                            first_iqr_time = timestamps.iloc[first_iqr] if first_iqr is not None else None
+
+                            has_flags = True
+
+                        except Exception as e:
+                            print(f"  Warning: could not compute flags for trend plot: {e}")
+                            has_flags = False
+
+                        # downsampled versions for visualization only
+                        signal_plot = signal.iloc[::DOWNSAMPLE_FACTOR]
+                        timestamps_plot = timestamps.iloc[::DOWNSAMPLE_FACTOR]
+                        rolling_mean_plot = rolling_mean.iloc[::DOWNSAMPLE_FACTOR]
+                        iqr_flags_plot = iqr_flags.iloc[::DOWNSAMPLE_FACTOR] if iqr_flags is not None else None
+                        zscore_flags_plot = zscore_flags.iloc[::DOWNSAMPLE_FACTOR] if zscore_flags is not None else None
+
+                        for window_hours in TREND_ANALYSIS_WINDOWS_HOURS:
+                            fig = go.Figure()
+
                             fig.add_trace(go.Scatter(
-                                x=timestamps_plot.values[zscore_mask], y=signal_plot.values[zscore_mask],
-                                mode="markers", name="Z-score anomaly flag",
-                                marker=dict(color="red", size=4, opacity=0.6)
+                                x=timestamps_plot, y=signal_plot.values, mode="lines",
+                                name="Vibration (raw)", line=dict(color="steelblue", width=1)
                             ))
 
-                    fig.add_vline(
-                        x=failure_time, line_dash="dash",
-                        line_color="darkred", line_width=2,
-                    )
+                            fig.add_trace(go.Scatter(
+                                x=timestamps_plot, y=rolling_mean_plot.values, mode="lines",
+                                name=f"{ANOMALY_ROLLING_PLOT_WINDOW_HOURS}h rolling mean",
+                                line=dict(color="red", width=2, dash="dash")
+                            ))
 
-                    trend_dir, p_val, slope, significant = trend_results[window_hours]
-                    sig_label = "SIGNIFICANT" if significant else "not significant"
+                            if has_flags and iqr_flags_plot is not None:
+                                flag_mask = iqr_flags_plot.values == 1
+                                if flag_mask.any():
+                                    fig.add_trace(go.Scatter(
+                                        x=timestamps_plot.values[flag_mask], y=signal_plot.values[flag_mask],
+                                        mode="markers", name="IQR anomaly flag",
+                                        marker=dict(color="orange", size=4, opacity=0.6)
+                                    ))
 
-                    fig.update_layout(
-                        title=f"Bearing {bearing_asset}: Vibration Trend & Anomaly Detection — {window_hours}h Mann-Kendall Window<br>"
-                              f"<sup>Trend: {trend_dir} | p={p_val:.4f} | {sig_label}</sup>",
-                        xaxis_title="Time",
-                        yaxis_title="Vibration (mm/s RMS)",
-                        hovermode="x unified",
-                        height=600,
-                        template="plotly_white",
-                    )
-                    output_file = os.path.join(trend_output, f"bearing_trend_{window_hours}h.html")
-                    fig.write_html(output_file)
-                    print(f"Plot saved: {output_file}")
+                                if first_iqr_time:
+                                    fig.add_vline(
+                                        x=first_iqr_time, line_dash="dot",
+                                        line_color="orange", line_width=2,
+                                    )
 
-                del df_bearing, signal, timestamps, rolling_mean, trend_window_signal
-                del signal_plot, timestamps_plot, rolling_mean_plot, iqr_flags_plot, zscore_flags_plot
-                gc.collect()
+                            if has_flags and zscore_flags_plot is not None:
+                                zscore_mask = zscore_flags_plot.values == 1
+                                if zscore_mask.any():
+                                    fig.add_trace(go.Scatter(
+                                        x=timestamps_plot.values[zscore_mask], y=signal_plot.values[zscore_mask],
+                                        mode="markers", name="Z-score anomaly flag",
+                                        marker=dict(color="red", size=4, opacity=0.6)
+                                    ))
+
+                            fig.add_vline(
+                                x=failure_time, line_dash="dash",
+                                line_color="darkred", line_width=2,
+                            )
+
+                            trend_dir, p_val, slope, significant = trend_results[window_hours]
+                            sig_label = "SIGNIFICANT" if significant else "not significant"
+
+                            p_plot = f"{p_val:.4f}" if p_val is not None else "N/A"
+                            fig.update_layout(
+                                title=f"Bearing {bearing_asset}: Vibration Trend & Anomaly Detection: {window_hours}h Mann-Kendall Window<br>"
+                                      f"<sup>Trend: {trend_dir} | p={p_plot} | {sig_label}</sup>",
+                                xaxis_title="Time",
+                                yaxis_title="Vibration (mm/s RMS)",
+                                hovermode="x unified",
+                                height=600,
+                                template="plotly_white",
+                            )
+
+                            output_file = os.path.join(TREND_OUTPUT_DIR, TREND_HTML_TEMPLATE.format(window_hours=window_hours))
+                            fig.write_html(output_file)
+                            print(f"Plot saved: {output_file}")
+
+                        del df_bearing, signal, timestamps, rolling_mean, trend_window_signal
+                        del signal_plot, timestamps_plot, rolling_mean_plot, iqr_flags_plot, zscore_flags_plot
+                        gc.collect()
+
+engine.dispose()
 
 print(f"\n{'='*70}")
 print("ANALYSIS COMPLETE")
 print(f"{'='*70}")
-print(f"Output directory: {output_base}")
 print("All results saved.")

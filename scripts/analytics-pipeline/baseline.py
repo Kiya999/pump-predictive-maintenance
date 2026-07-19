@@ -1,10 +1,17 @@
 # baseline.py
+"""
+Baseline calculator: fit and apply three baseline methods (rolling, hourly,
+state-based) with configurable control limits.
+"""
+
 import pandas as pd
 import numpy as np
 
-class BaselineCalculator:
+from analytics_config import SAMPLING_FREQ_MINUTES
 
-    def __init__(self, training_signal, training_flow=None, training_timestamps=None):
+class BaselineCalculator:
+    """Fit baseline methods (rolling, hourly, state-based) and compute control limits."""
+    def __init__(self, training_signal, training_flow, training_timestamps):
         self.training_signal = training_signal.copy()
         self.training_flow = training_flow.copy() if training_flow is not None else None
         self.training_timestamps = training_timestamps
@@ -15,9 +22,11 @@ class BaselineCalculator:
         self.state_stats = None
 
     def fit_rolling(self, window_hours):
-        self.window_periods = window_hours * 60
+        """Store rolling window size in minutes for later application"""
+        self.window_periods = int(window_hours * 60 / SAMPLING_FREQ_MINUTES)
 
     def fit_hourly(self):
+        """Compute mean and std for each hour of day from training data"""
         if self.training_timestamps is None:
             raise ValueError("training_timestamps required for hourly baseline")
 
@@ -33,6 +42,7 @@ class BaselineCalculator:
         self.hourly_stats = df.groupby("hour")["signal"].agg(["mean", "std"])
 
     def fit_state(self):
+        """Partition flow into low/mid/high bins and compute signal stats per state"""
         if self.training_flow is None:
             raise ValueError("training_flow required for state baseline")
 
@@ -44,7 +54,8 @@ class BaselineCalculator:
         df = pd.DataFrame({"signal": self.training_signal.values, "state": states})
         self.state_stats = df.groupby("state", observed=False)["signal"].agg(["mean", "std"])
 
-    def apply_rolling(self, full_signal, num_std=3):
+    def apply_rolling(self, full_signal, num_std):
+        """Apply rolling mean and std to compute baseline and control limits"""
         if self.window_periods is None:
             raise ValueError("fit_rolling() not called")
 
@@ -56,7 +67,8 @@ class BaselineCalculator:
 
         return {"baseline": baseline, "upper": upper, "lower": lower}
 
-    def apply_hourly(self, full_timestamps, full_signal, num_std=3):
+    def apply_hourly(self, full_timestamps, full_signal, num_std):
+        """Map hourly statistics to signal and compute baseline and control limits."""
         if self.hourly_stats is None:
             raise ValueError("fit_hourly() not called")
 
@@ -65,11 +77,11 @@ class BaselineCalculator:
         else:
             hour_arr = full_timestamps.hour.values
 
-        mean_arr = self.hourly_stats["mean"].values
-        std_arr  = self.hourly_stats["std"].values
+        mean_map = self.hourly_stats["mean"].to_dict()
+        std_map = self.hourly_stats["std"].to_dict()
 
-        baseline_vals = mean_arr[hour_arr]
-        std_vals      = std_arr[hour_arr]
+        baseline_vals = [mean_map.get(h, np.nan) for h in hour_arr]
+        std_vals = [std_map.get(h, np.nan) for h in hour_arr]
 
         baseline = pd.Series(baseline_vals, index=full_signal.index)
         stds     = pd.Series(std_vals,      index=full_signal.index)
@@ -78,7 +90,8 @@ class BaselineCalculator:
 
         return {"baseline": baseline, "upper": upper, "lower": lower}
 
-    def apply_state(self, full_flow, full_signal, num_std=3):
+    def apply_state(self, full_flow, full_signal, num_std):
+        """Map flow state to signal statistics and compute baseline and control limits."""
         if self.state_stats is None:
             raise ValueError("fit_state() not called")
 
@@ -101,7 +114,7 @@ class BaselineCalculator:
     def debug_summary(self, method_name):
         print(f"  === {method_name.upper()} ===")
         if method_name == "rolling":
-            print(f"    Window periods: {self.window_periods} (24h in 1-min samples)")
+            print(f"    Window periods: {self.window_periods}")
         elif method_name == "hourly":
             if self.hourly_stats is not None:
                 print(f"    Hourly stats computed for {len(self.hourly_stats)} hours")
