@@ -1,21 +1,29 @@
 # alarm_analytics.py
+"""
+Alarm log analytics: detect chattering, stale alarms, clusters, and
+compute daily rates vs ISA-18.2 benchmarks. Validates test cases.
+"""
+
 import os
 import sys
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
 
-ISA_CHATTER_MAX_EVENTS = 3
-ISA_CHATTER_WINDOW_MIN = 5
-STALE_ALARM_HOURS = 24
-CLUSTER_WINDOW_MIN = 30
-ISA_DAILY_RATE_TARGET = 144
-
+from analytics_config import (
+    ALARM_TABLE, ALARM_TEST_CASE_VALUE, ALARM_TEST_CASES,
+    ISA_CHATTER_MAX_EVENTS, ISA_CHATTER_WINDOW_MIN,
+    STALE_ALARM_HOURS, CLUSTER_WINDOW_MIN, ISA_DAILY_RATE_TARGET,
+    OUTPUT_DIR, OUTPUT_FILES, ETL_PIPELINE_PATH,
+)
 
 class AlarmAnalytics:
+    """Load alarm log from database and compute analytics: chattering, stale, clusters, daily rates."""
     def __init__(self, db_path):
+        """Load alarm_log_clean table and prepare for analysis."""
         engine = create_engine(f"sqlite:///{db_path}")
-        self.df = pd.read_sql_table("alarm_log_clean", engine)
+        self.df = pd.read_sql_table(ALARM_TABLE, engine)
+        engine.dispose()
         self._validate_schema()
 
         self.df["timestamp"] = pd.to_datetime(self.df["timestamp"])
@@ -24,13 +32,14 @@ class AlarmAnalytics:
         self.df = self.df.sort_values("timestamp").reset_index(drop=True)
 
     def _validate_schema(self):
+        """Check for required alarm columns."""
         required = ["asset_id", "alarm_tag", "timestamp", "priority"]
         missing = [c for c in required if c not in self.df.columns]
         if missing:
             raise ValueError(f"Missing required columns: {missing}")
 
     def alarm_rate_per_asset_per_day(self):
-        """Daily alarm count per asset vs ISA-18.2 target (144/day)"""
+        """Daily alarm count per asset vs ISA-18.2 target (ISA_DAILY_RATE_TARGET/day)"""
         temp = self.df.copy()
         temp["date"] = temp["timestamp"].dt.date
         rate = temp.groupby(["asset_id", "date"]).size().reset_index(name="alarm_count")
@@ -38,6 +47,7 @@ class AlarmAnalytics:
         return rate
 
     def top_10_alarms(self):
+        """Return top 10 alarm tags by frequency with average priority."""
         grouped = self.df.groupby("alarm_tag").agg(
             alarm_description=("alarm_description", "first"),
             avg_priority=("priority", "mean"),
@@ -47,7 +57,8 @@ class AlarmAnalytics:
             ["alarm_tag", "alarm_description", "count", "avg_priority"]
         ]
 
-    def average_time_to_acknowledge(self, per_asset=True):
+    def average_time_to_acknowledge(self, per_asset):
+        """Compute mean time from alarm activation to acknowledgment."""
         valid = self.df.dropna(subset=["ack_time"]).copy()
         valid["ack_hours"] = (valid["ack_time"] - valid["timestamp"]).dt.total_seconds() / 3600.0
 
@@ -55,7 +66,8 @@ class AlarmAnalytics:
             return valid.groupby("asset_id")["ack_hours"].mean().reset_index(name="avg_hours_to_ack")
         return valid["ack_hours"].mean()
 
-    def detect_stale_alarms(self, hours=STALE_ALARM_HOURS):
+    def detect_stale_alarms(self, hours):
+        """Find alarms active longer than threshold or never cleared."""
         df = self.df.copy()
         now_reference = df["timestamp"].max()
 
@@ -75,7 +87,8 @@ class AlarmAnalytics:
             ["asset_id", "alarm_tag", "timestamp", "clear_time", "active_hours", "stale_reason"]
         ]
 
-    def detect_chattering(self, window_minutes=ISA_CHATTER_WINDOW_MIN, max_events=ISA_CHATTER_MAX_EVENTS):
+    def detect_chattering(self, window_minutes, max_events):
+        """Flag rapid repeated alarms (same asset/tag within window)."""
         results = []
         for (asset, tag), group in self.df.groupby(["asset_id", "alarm_tag"]):
             times = group["timestamp"].sort_values().values
@@ -98,7 +111,8 @@ class AlarmAnalytics:
         result_df = pd.DataFrame(results).drop_duplicates(subset=["asset_id", "alarm_tag", "window_start"])
         return result_df.sort_values("event_count", ascending=False).reset_index(drop=True)
 
-    def cluster_alarms(self, time_window_minutes=CLUSTER_WINDOW_MIN):
+    def cluster_alarms(self, time_window_minutes):
+        """Group distinct alarm tags per asset within time window; flag multi-alarm clusters."""
         results = []
         cluster_id = 0
 
@@ -156,59 +170,64 @@ class AlarmAnalytics:
         return pd.DataFrame(results)
 
     def validate_against_known_test_cases(self):
+        """Check if synthetic test cases were detected correctly."""
         if "is_test_case" not in self.df.columns:
             print("is_test_case column not found")
             return
 
-        test_rows = self.df[self.df["is_test_case"] == "YES"]
+        test_rows = self.df[self.df["is_test_case"] == ALARM_TEST_CASE_VALUE]
         print(f"Test case rows: {len(test_rows)}")
 
-        chatter = self.detect_chattering()
-        found_chatter = len(chatter[(chatter["asset_id"] == "P-0100") & (chatter["alarm_tag"] == "P-0100.VI_HI")]) > 0
-        print(f"Chattering (P-0100.VI_HI): {'PASS' if found_chatter else 'FAIL'}")
+        chatter = self.detect_chattering(ISA_CHATTER_WINDOW_MIN, ISA_CHATTER_MAX_EVENTS)
+        stale = self.detect_stale_alarms(STALE_ALARM_HOURS)
+        clusters = self.cluster_alarms(CLUSTER_WINDOW_MIN)
 
-        stale = self.detect_stale_alarms()
-        found_stale = len(stale[(stale["asset_id"] == "P-0200") & (stale["alarm_tag"] == "P-0200.FI_LO")]) > 0
-        print(f"Stale (P-0200.FI_LO): {'PASS' if found_stale else 'FAIL'}")
+        chatter_case = ALARM_TEST_CASES["chattering"]
+        found_chatter = len(chatter[(chatter["asset_id"] == chatter_case["asset_id"])
+                                    & (chatter["alarm_tag"] == chatter_case["alarm_tag"])]) > 0
+        print(f"Chattering: {'PASS' if found_chatter else 'FAIL'}")
 
-        clusters = self.cluster_alarms()
-        found_cluster = len(clusters[clusters["asset_id"] == "P-0300"]) > 0
-        print(f"Cluster (P-0300): {'PASS' if found_cluster else 'FAIL'}")
+        stale_case = ALARM_TEST_CASES["stale"]
+        found_stale = len(stale[(stale["asset_id"] == stale_case["asset_id"])
+                                & (stale["alarm_tag"] == stale_case["alarm_tag"])]) > 0
+        print(f"Stale: {'PASS' if found_stale else 'FAIL'}")
+
+        cluster_case = ALARM_TEST_CASES["cluster"]
+        found_cluster = len(clusters[clusters["asset_id"] == cluster_case["asset_id"]]) > 0
+        print(f"Cluster: {'PASS' if found_cluster else 'FAIL'}")
 
 
 if __name__ == "__main__":
-    db_path = os.path.join(os.path.dirname(__file__), "..", "etl-pipeline", "output", "etl_pipeline.db")
-    if not os.path.exists(db_path):
-        print(f"Database not found: {db_path}")
+    if not os.path.exists(ETL_PIPELINE_PATH):
+        print(f"Database not found: {ETL_PIPELINE_PATH}")
         sys.exit(1)
 
     print("Loading alarm analytics...")
-    aa = AlarmAnalytics(db_path)
+    aa = AlarmAnalytics(ETL_PIPELINE_PATH)
     print(f"Records: {len(aa.df)}\n")
 
     print("Test case validation:")
     aa.validate_against_known_test_cases()
 
-    output_dir = os.path.join(os.path.dirname(__file__), "output")
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     print("\nComputing metrics...")
     rate_df = aa.alarm_rate_per_asset_per_day()
-    rate_df.to_csv(os.path.join(output_dir, "alarm_rate_daily.csv"), index=False)
+    rate_df.to_csv(os.path.join(OUTPUT_DIR, OUTPUT_FILES["alarm_rate_daily"]), index=False)
 
     top10 = aa.top_10_alarms()
-    top10.to_csv(os.path.join(output_dir, "alarm_frequency_top10.csv"), index=False)
+    top10.to_csv(os.path.join(OUTPUT_DIR, OUTPUT_FILES["alarm_frequency_top10"]), index=False)
 
     avg_ack = aa.average_time_to_acknowledge(per_asset=True)
-    avg_ack.to_csv(os.path.join(output_dir, "alarm_avg_time_to_ack.csv"), index=False)
+    avg_ack.to_csv(os.path.join(OUTPUT_DIR, OUTPUT_FILES["alarm_avg_time_to_ack"]), index=False)
 
-    stale = aa.detect_stale_alarms()
-    stale.to_csv(os.path.join(output_dir, "alarm_stale_events.csv"), index=False)
+    stale = aa.detect_stale_alarms(STALE_ALARM_HOURS)
+    stale.to_csv(os.path.join(OUTPUT_DIR, OUTPUT_FILES["alarm_stale_events"]), index=False)
 
-    chatter = aa.detect_chattering()
-    chatter.to_csv(os.path.join(output_dir, "alarm_chattering_events.csv"), index=False)
+    chatter = aa.detect_chattering(ISA_CHATTER_WINDOW_MIN, ISA_CHATTER_MAX_EVENTS)
+    chatter.to_csv(os.path.join(OUTPUT_DIR, OUTPUT_FILES["alarm_chattering_events"]), index=False)
 
-    clusters = aa.cluster_alarms()
-    clusters.to_csv(os.path.join(output_dir, "alarm_clusters.csv"), index=False)
+    clusters = aa.cluster_alarms(CLUSTER_WINDOW_MIN)
+    clusters.to_csv(os.path.join(OUTPUT_DIR, OUTPUT_FILES["alarm_clusters"]), index=False)
 
-    print(f"Outputs saved to {output_dir}")
+    print(f"Outputs saved to {OUTPUT_DIR}")
