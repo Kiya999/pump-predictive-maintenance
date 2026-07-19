@@ -13,7 +13,6 @@ CHATTERING_EVENTS_COUNT = 7
 CHATTERING_INTERVAL_MIN = 1.2
 CHATTERING_DURATION_MIN = 0.8
 STALE_ALARM_DURATION_MIN = 3120.0
-CASCADE_BATCH_SIZE = 5
 CASCADE_INTERVAL_SEC = 25
 OPERATORS = ["OP01", "OP02", "OP03", "OP04", "OP05"]
 
@@ -30,7 +29,6 @@ CASCADE_ACK_DELAY_MIN = 0.8
 
 ## ISA-18.2 Reference (alarm_log_generator.py)
 ISA_18_2_ALARMS_PER_ASSET_PER_DAY_MAX = 144
-
 
 ## Alarm Definitions (alarm_log_generator.py)
 ALARM_TAG_TEMPLATES = {
@@ -49,8 +47,6 @@ FAILURE_FAMILY_MAP = {
     "cavitation": ["flow", "pressure"],
     "insulation": ["current", "temperature"],
 }
-
-
 
 ## Quality Assessment Parameters (run_quality_alarm_log.py)
 IQR_MULTIPLIER = 1.5
