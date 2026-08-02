@@ -4,18 +4,37 @@ import pandas as pd
 
 _engine = None
 
+IQR_MULTIPLIER = 2  # Conservative (higher = fewer false positives, fewer real anomalies caught) 2 is bettter than 1.5
+
 
 def set_engine(engine):
     global _engine
     _engine = engine
 
 
-def _health_color(anomaly_pct, alarm_count):
-    if anomaly_pct > 10.0 or alarm_count >= 15:
+def _health_color(ground_truth_pct, alarm_count):
+    if ground_truth_pct > 10.0 or alarm_count >= 15:
         return "#e74c3c", "At Risk"
-    if anomaly_pct > 2.0 or alarm_count >= 5:
+    if ground_truth_pct > 2.0 or alarm_count >= 5:
         return "#f39c12", "Caution"
     return "#27ae60", "Healthy"
+
+
+def _compute_iqr_flag_rates(vib_df):
+    rates = {}
+    for asset_id, group in vib_df.groupby("asset_id"):
+        s = group["vibration_mm_s"].dropna()
+        if len(s) == 0:
+            rates[asset_id] = 0.0
+            continue
+        q1 = s.quantile(0.25)
+        q3 = s.quantile(0.75)
+        iqr_val = q3 - q1
+        lower_fence = q1 - IQR_MULTIPLIER * iqr_val
+        upper_fence = q3 + IQR_MULTIPLIER * iqr_val
+        flagged = ((s < lower_fence) | (s > upper_fence)).sum()
+        rates[asset_id] = 100.0 * flagged / len(s)
+    return rates
 
 
 @callback(
@@ -33,7 +52,7 @@ def update_asset_overview(start_date, end_date, selected_asset):
         query_hist = f"""
         SELECT asset_id,
             COUNT(*) as total_rows,
-            SUM(CASE WHEN failure_type != 'none' THEN 1 ELSE 0 END) as anomaly_count,
+            SUM(CASE WHEN failure_type != 'none' THEN 1 ELSE 0 END) as ground_truth_count,
             AVG(vibration_mm_s) as avg_vib,
             AVG(motor_temp_c) as avg_temp
         FROM historian_clean
@@ -63,6 +82,14 @@ def update_asset_overview(start_date, end_date, selected_asset):
         """
         recent_df = pd.read_sql(query_recent_failure, _engine)
 
+        query_vib = f"""
+        SELECT asset_id, vibration_mm_s
+        FROM historian_clean
+        WHERE timestamp BETWEEN '{start_date}' AND '{end_date}'
+        """
+        vib_df = pd.read_sql(query_vib, _engine)
+        iqr_rates = _compute_iqr_flag_rates(vib_df)
+        
         merged = hist_df.merge(alarm_df, on="asset_id", how="left")
         merged = merged.merge(recent_df, on="asset_id", how="left", suffixes=("", "_recent"))
         merged["alarm_count"] = merged["alarm_count"].fillna(0).astype(int)
@@ -72,14 +99,15 @@ def update_asset_overview(start_date, end_date, selected_asset):
         for _, row in merged.iterrows():
             asset_id = row["asset_id"]
             total_rows = row["total_rows"]
-            anomaly_pct = 100.0 * row["anomaly_count"] / total_rows if total_rows > 0 else 0
+            ground_truth_pct = 100.0 * row["ground_truth_count"] / total_rows if total_rows > 0 else 0
             runtime_hours = total_rows / 60.0
             avg_vib = row["avg_vib"] if pd.notna(row["avg_vib"]) else 0
             avg_temp = row["avg_temp"] if pd.notna(row["avg_temp"]) else 0
             alarm_count = row["alarm_count"]
             recent_flag = row["failure_type"]
+            iqr_rate = iqr_rates.get(asset_id, 0.0)
 
-            color, status = _health_color(anomaly_pct, alarm_count)
+            color, status = _health_color(ground_truth_pct, alarm_count)
             is_selected = asset_id == selected_asset
 
             card = html.Div(
@@ -100,7 +128,8 @@ def update_asset_overview(start_date, end_date, selected_asset):
                     ], style={"marginBottom": 8}),
 
                     html.Div(f"Runtime: {runtime_hours:.0f} h", style={"fontSize": 12}),
-                    html.Div(f"Anomalies: {anomaly_pct:.2f}%", style={"fontSize": 12}),
+                    html.Div(f"Ground truth failure coverage: {ground_truth_pct:.2f}%", style={"fontSize": 12}),
+                    html.Div(f"IQR flag rate (vibration): {iqr_rate:.2f}%", style={"fontSize": 12}),                    
                     html.Div(f"Avg vibration: {avg_vib:.4f} mm/s", style={"fontSize": 12}),
                     html.Div(f"Avg temp: {avg_temp:.1f} C", style={"fontSize": 12}),
                     html.Div(f"Alarms (24h): {alarm_count}", style={"fontSize": 12}),
@@ -116,7 +145,6 @@ def update_asset_overview(start_date, end_date, selected_asset):
                     "boxShadow": "0 0 6px rgba(52,152,219,0.6)" if is_selected else "none",
                     "cursor": "pointer",
                 }
-
 
             )
             cards.append(card)
