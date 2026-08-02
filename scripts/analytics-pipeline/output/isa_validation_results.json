@@ -1,0 +1,5 @@
+{
+  "chattering": true,
+  "stale": true,
+  "cluster": true
+}

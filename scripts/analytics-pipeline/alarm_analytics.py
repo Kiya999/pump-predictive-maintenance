@@ -9,6 +9,7 @@ import sys
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
+import json 
 
 from analytics_config import (
     ALARM_TABLE, ALARM_TEST_CASE_VALUE, ALARM_TEST_CASES,
@@ -173,7 +174,7 @@ class AlarmAnalytics:
         """Check if synthetic test cases were detected correctly."""
         if "is_test_case" not in self.df.columns:
             print("is_test_case column not found")
-            return
+            return {"chattering": None, "stale": None, "cluster": None}
 
         test_rows = self.df[self.df["is_test_case"] == ALARM_TEST_CASE_VALUE]
         print(f"Test case rows: {len(test_rows)}")
@@ -196,7 +197,12 @@ class AlarmAnalytics:
         found_cluster = len(clusters[clusters["asset_id"] == cluster_case["asset_id"]]) > 0
         print(f"Cluster: {'PASS' if found_cluster else 'FAIL'}")
 
-
+        return {
+            "chattering": found_chatter,
+            "stale": found_stale,
+            "cluster": found_cluster,
+        }
+    
 if __name__ == "__main__":
     if not os.path.exists(ETL_PIPELINE_PATH):
         print(f"Database not found: {ETL_PIPELINE_PATH}")
@@ -207,9 +213,12 @@ if __name__ == "__main__":
     print(f"Records: {len(aa.df)}\n")
 
     print("Test case validation:")
-    aa.validate_against_known_test_cases()
-
+    validation_results = aa.validate_against_known_test_cases()
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    with open(os.path.join(OUTPUT_DIR, OUTPUT_FILES["isa_validation_results"]), "w") as f:
+        json.dump(validation_results, f, indent=2)
+        
 
     print("\nComputing metrics...")
     rate_df = aa.alarm_rate_per_asset_per_day()

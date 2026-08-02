@@ -30,6 +30,7 @@ OUTPUT_FILES = {
     "alarm_stale_events": "alarm_stale_events.csv",
     "alarm_chattering_events": "alarm_chattering_events.csv",
     "alarm_clusters": "alarm_clusters.csv",
+    "isa_validation_results": "isa_validation_results.json",
 }
 
 ANALYSIS_OUTPUT_FILES = {
