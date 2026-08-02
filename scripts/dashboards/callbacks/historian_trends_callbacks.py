@@ -22,6 +22,7 @@ SIGNAL_LABELS = {
     "vibration_mm_s": "Vibration (mm/s)",
 }
 
+IQR_MULTIPLIER = 2  # Conservative (higher = fewer false positives, fewer real anomalies caught) 2 is bettter than 1.5
 
 def set_engine(engine):
     global _engine
@@ -30,11 +31,12 @@ def set_engine(engine):
 
 def _apply_hourly_baseline(timestamps, hourly_stats, num_std=3):
     hours = timestamps.dt.hour.astype(str)
-    means = hours.map(lambda h: hourly_stats.get(h, [None, None])[0]).astype(float)
-    stds = hours.map(lambda h: hourly_stats.get(h, [None, None])[1]).astype(float)
+    is_weekend = timestamps.dt.dayofweek.isin([5, 6]).astype(int).astype(str)
+    keys = hours + "_" + is_weekend
+    means = keys.map(lambda k: hourly_stats.get(k, [None, None])[0]).astype(float)
+    stds = keys.map(lambda k: hourly_stats.get(k, [None, None])[1]).astype(float)
 
     baseline = pd.Series(means.values, index=timestamps.index)
-    stds = pd.Series(stds.values, index=timestamps.index)
     upper = baseline + num_std * stds
     lower = baseline - num_std * stds
 
@@ -68,8 +70,7 @@ def update_historian_trends(asset_id, start_date, end_date, subsample_on, baseli
         if len(df) == 0:
             return html.Div("No data for selected range")
 
-        asset_stats = (baseline_data or {}).get(asset_id)
-
+        asset_stats = (baseline_data or {}).get(f"{asset_id}_{end_date}")
         fig = make_subplots(
             rows=4, cols=1,
             shared_xaxes=True,
@@ -88,7 +89,7 @@ def update_historian_trends(asset_id, start_date, end_date, subsample_on, baseli
             if has_stats:
                 baseline, upper, lower = _apply_hourly_baseline(timestamps, asset_stats[col])
                 detector = AnomalyDetector({"baseline": baseline, "upper": upper, "lower": lower})
-                iqr_result = detector.iqr(signal, window_periods=1440, multiplier=1.0)
+                iqr_result = detector.iqr(signal, window_periods=10080 , multiplier=IQR_MULTIPLIER)
                 flag = iqr_result["flag"]
             else:
                 baseline = upper = lower = None
