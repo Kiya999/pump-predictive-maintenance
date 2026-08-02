@@ -67,7 +67,9 @@ def update_environmental_chart(asset_id, start_date, end_date, subsample_on):
         overlap_info = compute_overlap_correlation(
             hist_df_raw, env_df_raw,
             hist_col="flow_m3h",
-            env_col="discharge_cfs"
+            env_col="discharge_cfs",
+            hist_ts_col="timestamp",
+            env_ts_col="timestamp"
         )
 
         if "on" in subsample_on:

@@ -8,10 +8,11 @@ import time
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0, os.path.join(project_root, 'scripts', 'analytics-pipeline'))
 from environmental_correlation import compute_overlap_correlation
+
 from layout.header import ASSET_OPTIONS
 from layout.environmental_panel import create_environmental_panel
 
-db_path = os.path.join(os.path.dirname(__file__), "..", "etl-pipeline", "output", "etl_pipeline.db")
+from dashboard_config import DB_PATH
 
 passed = 0
 failed = 0
@@ -31,15 +32,15 @@ print("Dashboard validation tests")
 print()
 
 try:
-    exists = os.path.exists(db_path)
-    check("Database file exists", exists, f"{db_path}")
+    exists = os.path.exists(DB_PATH)
+    check("Database file exists", exists, f"{DB_PATH}")
 except Exception as e:
     check("Database file exists", False, str(e))
 
 print()
 
 try:
-    engine = create_engine(f"sqlite:///{db_path}")
+    engine = create_engine(f"sqlite:///{DB_PATH}")
     conn = engine.connect()
     conn.close()
     check("Database connection", True)

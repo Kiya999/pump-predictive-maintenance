@@ -1,19 +1,21 @@
 # header.py
-import os
 from dash import html, dcc
 import pandas as pd
 from sqlalchemy import create_engine
 
-db_path = os.path.join(os.path.dirname(__file__), "../..", "etl-pipeline", "output", "etl_pipeline.db")
+from dashboard_config import DB_PATH, DEFAULT_START_DATE, DEFAULT_END_DATE, MAX_WIDTH, BG_COLOR
 
-engine = create_engine(f"sqlite:///{db_path}")
+def get_asset_options():
+    """Load asset list from database."""
+    engine = create_engine(f"sqlite:///{DB_PATH}")
+    try:
+        asset_query = "SELECT DISTINCT asset_id FROM historian_clean ORDER BY asset_id"
+        assets_df = pd.read_sql(asset_query, engine)
+        return [{"label": asset, "value": asset} for asset in assets_df["asset_id"]]
+    finally:
+        engine.dispose()
 
-asset_query = "SELECT DISTINCT asset_id FROM historian_clean ORDER BY asset_id"
-assets_df = pd.read_sql(asset_query, engine)
-ASSET_OPTIONS = [{"label": asset, "value": asset} for asset in assets_df["asset_id"]]
-
-engine.dispose()
-
+ASSET_OPTIONS = get_asset_options()
 
 def create_header():
     return html.Div([
@@ -39,10 +41,10 @@ def create_header():
                     html.Label("Date Range:", style={"fontWeight": "bold"}),
                     dcc.DatePickerRange(
                         id="date-range-picker",
-                        start_date="2025-07-21",
-                        end_date="2025-07-31",
+                        start_date=DEFAULT_START_DATE,
+                        end_date=DEFAULT_END_DATE,
                         display_format="YYYY-MM-DD"
-                    ),
+                    ),                    
                 ], style={"flex": 1, "marginRight": 20}),
 
                 html.Div([
@@ -64,9 +66,9 @@ def create_header():
             }),
 
         ], style={
-            "maxWidth": 1800,
+            "maxWidth": MAX_WIDTH,
             "margin": "0 auto",
             "padding": "15px",
         }),
 
-    ], style={"backgroundColor": "#ecf0f1"})
+    ], style={"backgroundColor": BG_COLOR})

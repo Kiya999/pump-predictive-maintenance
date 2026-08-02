@@ -22,14 +22,13 @@ from callbacks import historian_trends_callbacks
 from callbacks import alarm_analysis_callbacks
 from callbacks import baseline_cache_callbacks
 
+from dashboard_config import DB_PATH, APP_TITLE, APP_HOST, APP_PORT, APP_DEBUG, MAX_WIDTH, FONT_FAMILY
 
-db_path = os.path.join(os.path.dirname(__file__), "..", "etl-pipeline", "output", "etl_pipeline.db")
-
-if not os.path.exists(db_path):
-    print(f"Error: database not found at {db_path}")
+if not os.path.exists(DB_PATH):
+    print(f"Error: database not found at {DB_PATH}")
     sys.exit(1)
 
-engine = create_engine(f"sqlite:///{db_path}")
+engine = create_engine(f"sqlite:///{DB_PATH}")
 environmental_callbacks.set_engine(engine)
 asset_overview_callbacks.set_engine(engine)
 historian_trends_callbacks.set_engine(engine)
@@ -37,7 +36,7 @@ alarm_analysis_callbacks.set_engine(engine)
 baseline_cache_callbacks.set_engine(engine)
 
 app = dash.Dash(__name__)
-app.title = "Pump & Motor Monitoring"
+app.title = APP_TITLE
 
 app.layout = html.Div([
     create_header(),
@@ -61,14 +60,14 @@ app.layout = html.Div([
             create_environmental_panel(),
         ], style={"display": "flex", "gap": 15, "marginBottom": 15}),
 
-        # Row 4: Motor Monitoring placeholder
-        html.Div([
-            create_motor_monitoring_panel(),
-        ], style={"display": "flex", "gap": 15, "marginBottom": 15}),
-    ], style={"maxWidth": 1800, "margin": "0 auto", "padding": "20px", "fontFamily": "Segoe UI, sans-serif", "color": "#2c3e50"}),
+        # # Row 4: Motor Monitoring placeholder
+        # html.Div([
+        #     create_motor_monitoring_panel(),
+        # ], style={"display": "flex", "gap": 15, "marginBottom": 15}),
+    ], style={"maxWidth": MAX_WIDTH, "margin": "0 auto", "padding": "20px", "fontFamily": FONT_FAMILY, "color": "#2c3e50"}),
 
 ], style={"fontFamily": "sans-serif", "backgroundColor": "#ecf0f1", "minHeight": "100vh"})
 
 if __name__ == "__main__":
-    print("Starting app at http://127.0.0.1:8050")
-    app.run(debug=True, host="127.0.0.1", port=8050)
+    print(f"Starting app at http://{APP_HOST}:{APP_PORT}")
+    app.run(debug=APP_DEBUG, host=APP_HOST, port=APP_PORT)
