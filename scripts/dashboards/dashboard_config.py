@@ -2,17 +2,21 @@
 """
 Dashboard configuration: database path, app settings.
 """
-
 import os
 
 ## Database
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "etl-pipeline", "output", "etl_pipeline.db")
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(_script_dir, "..", "etl-pipeline", "output", "etl_pipeline.db")
+DB_PATH = os.path.abspath(DB_PATH)
 
 ## App Settings (tunable)
 APP_TITLE = "Pump and Motor Monitoring"
 APP_HOST = "127.0.0.1"
 APP_PORT = 8050
 APP_DEBUG = True
+
+## Unit System (tunable: "metric" or "imperial")
+UNITS = "imperial"
 
 ## Layout (tunable)
 MAX_WIDTH = 1800
@@ -23,9 +27,6 @@ BG_COLOR = "#ecf0f1"
 DEFAULT_START_DATE = "2025-03-31"
 DEFAULT_END_DATE = "2025-04-14"
 
-
-
-## Add this key to the existing OUTPUT_FILES dict in analytics_config.py:
 OUTPUT_FILES = {
     "pf_alignment_csv": "pf_alignment_matrix.csv",
     "pf_alignment_excel": "pf_alignment_matrix.xlsx",
@@ -36,21 +37,20 @@ OUTPUT_FILES = {
     "alarm_stale_events": "alarm_stale_events.csv",
     "alarm_chattering_events": "alarm_chattering_events.csv",
     "alarm_clusters": "alarm_clusters.csv",
-    "isa_validation_results": "isa_validation_results.json",  # NEW
+    "isa_validation_results": "isa_validation_results.json",
 }
 
-
-
 ## Chatbot
-CHATBOT_DOCS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "glossary") # lets test with this directory first. it has only one single file in it.
+CHATBOT_DOCS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "docs", "chatbot-docs")
 OLLAMA_HOST = "http://localhost:11434"
 AVAILABLE_OLLAMA_MODELS = [
-    ("Qwen2.5 3B (1.9GB, fastest)", "qwen2.5:3b"),
-    ("Qwen3 8B (5.2GB, reasoning)", "qwen3:8b"),
+    # ("llama3.2:1b (fastest)", "llama3.2:1b"),
+    ("llama3.2:3b", "llama3.2:3b"),
+    ("gemma3:4b", "gemma3:4b"),
 ]
-DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
+DEFAULT_OLLAMA_MODEL = "llama3.2:3b"
 
 # Tune down if you see slow responses:
-CHATBOT_MAX_CHARS_PER_FILE = 4000  
+CHATBOT_MAX_CHARS_PER_FILE = 10000
 
 CHATBOT_REQUEST_TIMEOUT_S = 30
