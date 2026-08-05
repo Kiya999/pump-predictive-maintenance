@@ -17,7 +17,12 @@ from analytics_config import OUTPUT_DIR, OUTPUT_FILES, ISA_DAILY_RATE_TARGET
     Input("date-range-picker", "start_date"),  # load trigger; not date-filtered
 )
 def update_isa_alarm_panel(_start_date):
-
+    """
+    Load ISA-18.2 validation results (chattering/stale/cluster detection against synthetic test cases).
+    This is an INTERNAL ALGORITHM VALIDATION BADGE, not live compliance monitoring.
+    It proves the method works against known ground truth
+    Date range input is ignored - this is fixed, all-time.
+    """
     def _card(label, passed):
         if passed is None:
             text, color = "N/A", "#95a5a6"

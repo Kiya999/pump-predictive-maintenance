@@ -20,8 +20,8 @@ def set_engine(engine):
 
 def _kpi(label, value):
     return html.Div([
-        html.Div(label, style={"fontSize": 11, "color": "#bdc3c7"}),
-        html.Div(value, style={"fontSize": 22, "fontWeight": "bold", "color": "white"}),
+        html.Div(label, style={"fontSize": 11, "color": "#3a3c3d"}),
+        html.Div(value, style={"fontSize": 22, "fontWeight": "bold", "color": "black"}),
     ], style={"minWidth": 160})
 
 
@@ -30,6 +30,11 @@ def _kpi(label, value):
     Input("date-range-picker", "start_date"),
 )
 def update_kpi_header(_start_date):
+    """
+    Load pre-computed KPIs from static CSVs (lead_times.csv, false_positives_by_asset_signal.csv, etc.).
+    NOT reactive to date range or asset selection - these are all-time, all-asset metrics computed offline.
+    Used as a summary "dashboard health" header, not live drill-down analytics.
+    """
     kpis = []
 
     # Best lead time (min % of P-F interval among OK statuses)
@@ -40,12 +45,17 @@ def update_kpi_header(_start_date):
         hours_df = pd.read_csv(hours_path, index_col=0)
         valid = pct_df.stack().dropna()
         valid = valid[valid <= 100.0]
+
         if len(valid):
             best_idx = valid.idxmin()
-            best_hours = hours_df.loc[best_idx[0], best_idx[1]]
-            kpis.append(_kpi("Best detection lead time", f"{best_hours/24:.0f} days ahead"))
+            try:
+                best_hours = hours_df.loc[best_idx[0], best_idx[1]]
+                kpis.append(_kpi("Best detection lead time", f"{best_hours/24:.0f} days ahead"))
+            except Exception:
+                kpis.append(_kpi("Best detection lead time", "n/a"))
         else:
             kpis.append(_kpi("Best detection lead time", "n/a"))
+
     else:
         kpis.append(_kpi("Best detection lead time", "n/a"))
 

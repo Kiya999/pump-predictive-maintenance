@@ -4,6 +4,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from lib.unit_conversion import fmt_val, unit_label, convert_value, UNITS as UNITS_SETTING
+
 _engine = None
 
 ASSUMED_LINE_VOLTAGE_V = 400.0
@@ -52,6 +54,9 @@ def update_motor_monitoring(selected_asset, start_date, end_date):
 
         df["current_a_derived"] = _derive_current_amps(df["motor_power_kw"])
 
+        df["power_display"] = df["motor_power_kw"].apply(lambda x: convert_value(x, "power_kw"))
+        df["temp_display"] = df["motor_temp_c"].apply(lambda x: convert_value(x, "temp_c"))
+
         avg_power = df["motor_power_kw"].mean()
         avg_temp = df["motor_temp_c"].mean()
         avg_speed = df["speed_rpm"].mean()
@@ -60,7 +65,10 @@ def update_motor_monitoring(selected_asset, start_date, end_date):
         def _card(label, value, unit, sub=None):
             children = [
                 html.Div(label, style={"fontSize": 11, "color": "#7f8c8d"}),
-                html.Div(f"{value:.1f} {unit}", style={"fontSize": 18, "fontWeight": "bold"}),
+                html.Div(
+                    f"{value} {unit}".strip() if unit else value,
+                    style={"fontSize": 18, "fontWeight": "bold"}
+                ),
             ]
             if sub:
                 children.append(html.Div(sub, style={"fontSize": 10, "color": "#e67e22"}))
@@ -73,17 +81,17 @@ def update_motor_monitoring(selected_asset, start_date, end_date):
             })
 
         cards = [
-            _card("Avg Motor Power", avg_power, "kW"),
-            _card("Avg Motor Temp", avg_temp, "C"),
-            _card("Avg Speed", avg_speed, "RPM"),
-            _card("Avg Current (derived)", avg_current, "A", sub="assumed 400V, PF 0.87"),
+            _card("Avg Motor Power", fmt_val(avg_power, "power_kw", decimals=1), ""),
+            _card("Avg Motor Temp", fmt_val(avg_temp, "temp_c", decimals=1), ""),
+            _card("Avg Speed", fmt_val(avg_speed, "speed_rpm", decimals=1), ""),
+            _card("Avg Current (derived)", f"{avg_current:.1f} A", "", sub="assumed 400V, PF 0.87"),
         ]
 
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
         fig.add_trace(go.Scatter(
-            x=df["timestamp"], y=df["motor_power_kw"],
-            name="Motor Power (kW)", line=dict(color="#2980b9"),
+            x=df["timestamp"], y=df["power_display"],
+            name=f"Motor Power ({unit_label('power_kw')})", line=dict(color="#2980b9"),
         ), secondary_y=False)
 
         fig.add_trace(go.Scatter(
@@ -92,8 +100,8 @@ def update_motor_monitoring(selected_asset, start_date, end_date):
         ), secondary_y=False)
 
         fig.add_trace(go.Scatter(
-            x=df["timestamp"], y=df["motor_temp_c"],
-            name="Motor Temp (C)", line=dict(color="#e74c3c"),
+            x=df["timestamp"], y=df["temp_display"],
+            name=f"Motor Temp ({unit_label('temp_c')})", line=dict(color="#e74c3c"),
         ), secondary_y=True)
 
         fig.update_layout(
@@ -102,8 +110,8 @@ def update_motor_monitoring(selected_asset, start_date, end_date):
             legend=dict(orientation="h", y=-0.2),
             margin=dict(t=40, b=40),
         )
-        fig.update_yaxes(title_text="Power (kW) / Current (A)", secondary_y=False)
-        fig.update_yaxes(title_text="Temp (C)", secondary_y=True)
+        fig.update_yaxes(title_text=f"Power ({unit_label('power_kw')}) / Current (A)", secondary_y=False)
+        fig.update_yaxes(title_text=f"Temp ({unit_label('temp_c')})", secondary_y=True)
 
         note = (
             f"Current trace is derived, not measured: I = P / (√3 × V × PF), "
