@@ -9,7 +9,7 @@ import sys
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
-import json 
+import json
 
 from analytics_config import (
     ALARM_TABLE, ALARM_TEST_CASE_VALUE, ALARM_TEST_CASES,
@@ -202,7 +202,7 @@ class AlarmAnalytics:
             "stale": found_stale,
             "cluster": found_cluster,
         }
-    
+
 if __name__ == "__main__":
     if not os.path.exists(ETL_PIPELINE_PATH):
         print(f"Database not found: {ETL_PIPELINE_PATH}")
@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
     with open(os.path.join(OUTPUT_DIR, OUTPUT_FILES["isa_validation_results"]), "w") as f:
         json.dump(validation_results, f, indent=2)
-        
+
 
     print("\nComputing metrics...")
     rate_df = aa.alarm_rate_per_asset_per_day()

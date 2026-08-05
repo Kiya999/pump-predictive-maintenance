@@ -80,6 +80,14 @@ class BaselineCalculator:
         mean_map = self.hourly_stats["mean"].to_dict()
         std_map = self.hourly_stats["std"].to_dict()
 
+        all_hours = set(range(24))
+        trained_hours = set(mean_map.keys())
+        missing_hours = sorted(all_hours - trained_hours)
+
+        if missing_hours:
+            print(f"Warning: hourly baseline missing {len(missing_hours)} hours: {missing_hours}")
+            print(f"  Baseline will be NaN for these hours (check training data coverage)")
+
         baseline_vals = [mean_map.get(h, np.nan) for h in hour_arr]
         std_vals = [std_map.get(h, np.nan) for h in hour_arr]
 
@@ -118,9 +126,14 @@ class BaselineCalculator:
         elif method_name == "hourly":
             if self.hourly_stats is not None:
                 print(f"    Hourly stats computed for {len(self.hourly_stats)} hours")
-                print(f"    Hour 0: mean={self.hourly_stats.loc[0, 'mean']:.2f}, std={self.hourly_stats.loc[0, 'std']:.4f}")
-                print(f"    Hour 12: mean={self.hourly_stats.loc[12, 'mean']:.2f}, std={self.hourly_stats.loc[12, 'std']:.4f}")
-                print(f"    Hour 23: mean={self.hourly_stats.loc[23, 'mean']:.2f}, std={self.hourly_stats.loc[23, 'std']:.4f}")
+                sample_hours = [0, 12, 23]
+                for hour in sample_hours:
+                    if hour in self.hourly_stats.index:
+                        mean_val = self.hourly_stats.loc[hour, 'mean']
+                        std_val = self.hourly_stats.loc[hour, 'std']
+                        print(f"    Hour {hour}: mean={mean_val:.2f}, std={std_val:.4f}")
+                    else:
+                        print(f"    Hour {hour}: NOT IN TRAINING DATA")
         elif method_name == "state":
             if self.state_stats is not None:
                 print(f"    Flow quantile bins: q1={self.state_bins[1]:.2f}, q2={self.state_bins[2]:.2f}")

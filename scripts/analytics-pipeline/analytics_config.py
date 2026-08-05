@@ -36,6 +36,7 @@ OUTPUT_FILES = {
 ANALYSIS_OUTPUT_FILES = {
     "lead_times": "lead_times.csv",
     "lead_times_percent_pf": "lead_times_percent_pf.csv",
+    "lead_times_status": "lead_times_status.csv",
     "false_positives_monthly": "false_positives_monthly.csv",
     "false_positives_by_signal_month": "false_positives_by_signal_month.csv",
     "false_positives_by_asset_signal": "false_positives_by_asset_signal.csv",

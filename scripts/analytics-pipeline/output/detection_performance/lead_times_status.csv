@@ -1,0 +1,4 @@
+Scenario,Z-score,IQR,Moving avg
+bearing,OK,NO,OK
+cavitation,NO,NO,NO
+insulation,OK,OK,OK
