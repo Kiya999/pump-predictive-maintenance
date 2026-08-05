@@ -79,6 +79,10 @@ class AnomalyDetector:
         first_detection_idx = persistent_positions[0]
         return first_detection_idx
 
+    # NOTE: a spike_rate_detection() fallback (rolling flag-count threshold) was tried
+    # here for cavitation and removed -- it does not discriminate fault from healthy
+    # background noise. See analyze_detection_performance.py for full writeup.
+
     @staticmethod
     def lead_time_hours(first_flag_idx, failure_idx, sampling_freq_minutes):
         """Compute hours between first detection and failure."""

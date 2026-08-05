@@ -152,11 +152,37 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
         )
         first_persistent = (onset_idx + first_persistent_rel) if first_persistent_rel is not None else None
 
+        detection_method_used = "persistence"
+
+        # CAVITATION DETECTION: KNOWN LIMITATION
+        # Cavitation reliably returns NO PERSISTENT DETECTION on all three methods.
+        # Root cause: historian_generator.py injects cavitation as sparse, isolated-sample
+        # impulses (~0.6% flag probability/min at ramp end), not a sustained mean shift.
+        # persistent_detection() requires 70% flag occupancy in a 6h window -- correct
+        # behavior for bearing/insulation (sustained drift), structurally wrong for
+        # impulsive spikes.
+        #
+        # TRIED AND REJECTED: added AnomalyDetector.spike_rate_detection() as a fallback
+        # (rolling N-flags-in-24h count instead of occupancy %). Diagnostic script
+        # (debug_spike_rate_detection.py) proved this does NOT discriminate fault from
+        # healthy background noise -- pre-onset/healthy flag-count maxima routinely
+        # EXCEEDED the post-onset "detection" count (e.g. cavitation IQR: healthy-period
+        # max=227 vs detection threshold=100; healthy asset P-0200 motor_temp_c/IQR fired
+        # a false positive at hour 586 with zero fault present). No single global
+        # threshold separates the two distributions -- tuning the threshold only shifts
+        # where the false trigger lands, it does not remove it. Fallback removed.
+        #
+        # NEXT STEPS (not yet implemented): cavitation is a variance/frequency change,
+        # not a mean shift -- a detector on rolling residual variance or rolling
+        # IQR-width itself (rather than counting flags) is the more principled approach,
+        # but needs its own validation against healthy assets before trusting it.
+        # Until then, report NO detection for cavitation as the honest result.
+
+
         if first_persistent is not None and first_persistent < failure_idx:
             # This preserves IQR as the preferred anchor when it fires, but lets Z-score populate the dict when IQR doesn't
             if scenario_name not in first_detection_indices or method_name == "IQR":
                 first_detection_indices[scenario_name] = first_persistent
-
 
             lead_hours = AnomalyDetector.lead_time_hours(first_persistent, failure_idx, sampling_freq_minutes=SAMPLING_FREQ_MINUTES)
             lead_pct = 100.0 * lead_hours / pf_hours if pf_hours else None
@@ -166,7 +192,7 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
                 print(f"    {method_name:12s} {status}  {lead_hours:8.1f}h ({lead_pct:6.1f}% of P-F) <- exceeds P-F interval, likely FP")
             else:
                 status = "OK"
-                print(f"    {method_name:12s} {status}  {lead_hours:8.1f}h ({lead_pct:6.1f}% of P-F)")
+                print(f"    {method_name:12s} {status}  {lead_hours:8.1f}h ({lead_pct:6.1f}% of P-F) [{detection_method_used}]")
 
             print(f"      DEBUG: first_persistent_idx={first_persistent} failure_idx={failure_idx} gap={failure_idx - first_persistent}")
 
@@ -184,6 +210,8 @@ for scenario_name, signal_col, failure_type in FAILURE_SCENARIOS:
             "Method": method_name,
             "Lead time (hours)": lead_hours,
             "% of P-F interval": lead_pct,
+            "Status": status,
+            "Detection mode": detection_method_used,
         })
 
     del detector, detection_results, baseline_result
@@ -199,8 +227,12 @@ if lead_time_results:
 
     pivot_pct = results_df.pivot_table(index="Scenario", columns="Method", values="% of P-F interval", aggfunc="first").reindex(columns=col_order)
 
+    pivot_status = results_df.pivot_table(index="Scenario", columns="Method", values="Status", aggfunc="first").reindex(columns=col_order)
+
     pivot_hours.to_csv(os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["lead_times"]))
     pivot_pct.to_csv(os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["lead_times_percent_pf"]))
+    pivot_status.to_csv(os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES["lead_times_status"]))
+
 
     print(f"\n{'='*70}")
     print("DETECTION LEAD TIMES (hours)")
@@ -212,9 +244,15 @@ if lead_time_results:
     print(f"{'='*70}")
     print(pivot_pct.to_string())
 
+    print(f"\n{'='*70}")
+    print("DETECTION STATUS (OK | SUSPECT | NO)")
+    print(f"{'='*70}")
+    print(pivot_status.to_string())
+
     print("\nSaved to:")
-    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, 'lead_times.csv')}")
-    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, 'lead_times_percent_pf.csv')}")
+    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES['lead_times'])}")
+    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES['lead_times_percent_pf'])}")
+    print(f"  {os.path.join(DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES['lead_times_status'])}")
 else:
     print("Warning: no lead time results collected")
 
