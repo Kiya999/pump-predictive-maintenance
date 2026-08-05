@@ -1,10 +1,11 @@
 # asset_overview_callbacks.py
 from dash import callback, Input, Output, ALL, ctx, no_update, html
 import pandas as pd
+from lib.unit_conversion import convert_value, unit_label
 
 _engine = None
 
-IQR_MULTIPLIER = 2  # Conservative (higher = fewer false positives, fewer real anomalies caught) 2 is bettter than 1.5
+IQR_MULTIPLIER = 2  # Conservative (higher = fewer false positives, fewer real anomalies caught) 2 is better than 1.5
 
 
 def set_engine(engine):
@@ -89,7 +90,7 @@ def update_asset_overview(start_date, end_date, selected_asset):
         """
         vib_df = pd.read_sql(query_vib, _engine)
         iqr_rates = _compute_iqr_flag_rates(vib_df)
-        
+
         merged = hist_df.merge(alarm_df, on="asset_id", how="left")
         merged = merged.merge(recent_df, on="asset_id", how="left", suffixes=("", "_recent"))
         merged["alarm_count"] = merged["alarm_count"].fillna(0).astype(int)
@@ -106,6 +107,9 @@ def update_asset_overview(start_date, end_date, selected_asset):
             alarm_count = row["alarm_count"]
             recent_flag = row["failure_type"]
             iqr_rate = iqr_rates.get(asset_id, 0.0)
+
+            avg_vib_converted = convert_value(avg_vib, "vibration_mm_s")
+            avg_temp_converted = convert_value(avg_temp, "temp_c")
 
             color, status = _health_color(ground_truth_pct, alarm_count)
             is_selected = asset_id == selected_asset
@@ -129,9 +133,9 @@ def update_asset_overview(start_date, end_date, selected_asset):
 
                     html.Div(f"Runtime: {runtime_hours:.0f} h", style={"fontSize": 12}),
                     html.Div(f"Ground truth failure coverage: {ground_truth_pct:.2f}%", style={"fontSize": 12}),
-                    html.Div(f"IQR flag rate (vibration): {iqr_rate:.2f}%", style={"fontSize": 12}),                    
-                    html.Div(f"Avg vibration: {avg_vib:.4f} mm/s", style={"fontSize": 12}),
-                    html.Div(f"Avg temp: {avg_temp:.1f} C", style={"fontSize": 12}),
+                    html.Div(f"IQR flag rate (vibration): {iqr_rate:.2f}%", style={"fontSize": 12}),
+                    html.Div(f"Avg vibration: {avg_vib_converted:.4f} {unit_label('vibration_mm_s')}", style={"fontSize": 12}),
+                    html.Div(f"Avg temp: {avg_temp_converted:.1f} {unit_label('temp_c')}", style={"fontSize": 12}),
                     html.Div(f"Alarms (24h): {alarm_count}", style={"fontSize": 12}),
                     html.Div(f"Recent flag: {recent_flag}", style={"fontSize": 12, "color": "#7f8c8d"}),
                 ],

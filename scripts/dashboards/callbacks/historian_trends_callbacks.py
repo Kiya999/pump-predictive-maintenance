@@ -7,6 +7,8 @@ import pandas as pd
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
+from lib.unit_conversion import unit_label, UNITS, convert_value
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
 sys.path.insert(0, os.path.join(project_root, 'scripts', 'analytics-pipeline'))
 
@@ -15,14 +17,23 @@ from anomaly_detection import AnomalyDetector
 _engine = None
 
 SIGNAL_COLS = ["flow_m3h", "diff_pressure_bar", "motor_temp_c", "vibration_mm_s"]
-SIGNAL_LABELS = {
-    "flow_m3h": "Flow (m3/h)",
-    "diff_pressure_bar": "Diff pressure (bar)",
-    "motor_temp_c": "Motor temp (C)",
-    "vibration_mm_s": "Vibration (mm/s)",
+
+CONVERSION_KEY_MAP = {
+    "flow_m3h": "flow_m3h",
+    "diff_pressure_bar": "pressure_bar",
+    "motor_temp_c": "temp_c",
+    "vibration_mm_s": "vibration_mm_s",
 }
 
-IQR_MULTIPLIER = 2  # Conservative (higher = fewer false positives, fewer real anomalies caught) 2 is bettter than 1.5
+IQR_MULTIPLIER = 2  # Conservative (higher = fewer false positives, fewer real anomalies caught) 2 is better than 1.5
+
+def get_signal_labels():
+    return {
+        "flow_m3h": f"Flow ({unit_label('flow_m3h')})",
+        "diff_pressure_bar": f"Diff pressure ({unit_label('pressure_bar')})",
+        "motor_temp_c": f"Motor temp ({unit_label('temp_c')})",
+        "vibration_mm_s": f"Vibration ({unit_label('vibration_mm_s')})",
+    }
 
 def set_engine(engine):
     global _engine
@@ -70,18 +81,26 @@ def update_historian_trends(asset_id, start_date, end_date, subsample_on, baseli
         if len(df) == 0:
             return html.Div("No data for selected range")
 
-        asset_stats = (baseline_data or {}).get(f"{asset_id}_{end_date}")
+        cache_key = f"{asset_id}_{end_date}"
+
+        if not baseline_data or cache_key not in baseline_data:
+            asset_stats = None
+        else:
+            asset_stats = baseline_data[cache_key]
+
+        signal_labels = get_signal_labels()
+
         fig = make_subplots(
             rows=4, cols=1,
             shared_xaxes=True,
             vertical_spacing=0.12,
-            subplot_titles=[SIGNAL_LABELS[c] for c in SIGNAL_COLS],
+            subplot_titles=[signal_labels[c] for c in SIGNAL_COLS],
         )
 
         resample_rule = "5min" if "on" in subsample_on else None
 
         for row_idx, col in enumerate(SIGNAL_COLS, start=1):
-            signal = df[col]
+            signal = df[col]  # raw metric used for anomaly detection
             timestamps = df["timestamp"]
 
             has_stats = asset_stats and col in asset_stats and "error" not in asset_stats
@@ -97,16 +116,21 @@ def update_historian_trends(asset_id, start_date, end_date, subsample_on, baseli
 
             failure_mask = df["failure_type"] != "none"
 
+            conv_key = CONVERSION_KEY_MAP.get(col)
+            signal_display = signal.apply(lambda x: convert_value(x, conv_key)) if conv_key else signal
+            baseline_display = baseline.apply(lambda x: convert_value(x, conv_key)) if (baseline is not None and conv_key) else baseline
+            upper_display = upper.apply(lambda x: convert_value(x, conv_key)) if (upper is not None and conv_key) else upper
+            lower_display = lower.apply(lambda x: convert_value(x, conv_key)) if (lower is not None and conv_key) else lower
 
             plot_df = pd.DataFrame({
                 "timestamp": timestamps,
-                "signal": signal,
+                "signal": signal_display,
                 "flag": flag,
             })
-            if baseline is not None:
-                plot_df["baseline"] = baseline
-                plot_df["upper"] = upper
-                plot_df["lower"] = lower
+            if baseline_display is not None:
+                plot_df["baseline"] = baseline_display
+                plot_df["upper"] = upper_display
+                plot_df["lower"] = lower_display
 
             failure_periods = df.loc[failure_mask, "timestamp"]
             if len(failure_periods) > 0:
@@ -128,7 +152,7 @@ def update_historian_trends(asset_id, start_date, end_date, subsample_on, baseli
 
             fig.add_trace(go.Scatter(
                 x=plot_df["timestamp"], y=plot_df["signal"],
-                mode="lines", name=SIGNAL_LABELS[col],
+                mode="lines", name=signal_labels[col],
                 line=dict(color="#2c3e50", width=1),
                 showlegend=False,
             ), row=row_idx, col=1)
@@ -178,22 +202,23 @@ def update_historian_trends(asset_id, start_date, end_date, subsample_on, baseli
         )
         fig.update_xaxes(title_text="Time", row=4, col=1)
 
-        if not asset_stats:
+        if asset_stats is None:
             baseline_note = html.Div(
-                "Baseline not yet cached for this asset, computing on next update",
+                "Baseline not yet cached for this asset.",
                 style={"color": "#e67e22", "fontSize": 12, "marginBottom": 8}
             )
-        elif "error" in asset_stats:
+        elif isinstance(asset_stats, dict) and "error" in asset_stats:
             baseline_note = html.Div(
                 f"Baseline computation failed: {asset_stats['error']}",
                 style={"color": "#c0392b", "fontSize": 12, "marginBottom": 8}
             )
         else:
-            baseline_note = html.Div(
-                "Note: Red X markers are IQR-based anomaly flags (~1-4% false-positive rate on healthy "
-                "assets, higher in summer due to seasonal drift). Cross-check with failure shading before acting.",
-                style={"color": "#d68910", "fontSize": 11, "marginBottom": 12, "padding": "10px", "backgroundColor": "#fef5e7", "borderRadius": "4px", "borderLeft": "4px solid #e67e22"}
-            )
+            # baseline_note = html.Div(
+            #     "Note: Red X markers are IQR-based anomaly flags (~1-4% false-positive rate on healthy "
+            #     "assets, higher in summer due to seasonal drift). Cross-check with failure shading before acting.",
+            #     style={"color": "#d68910", "fontSize": 11, "marginBottom": 12, "padding": "10px", "backgroundColor": "#fef5e7", "borderRadius": "4px", "borderLeft": "4px solid #e67e22"}
+            # )
+            baseline_note = html.Div("",style={})
 
         return html.Div([baseline_note, dcc.Graph(figure=fig)])
 

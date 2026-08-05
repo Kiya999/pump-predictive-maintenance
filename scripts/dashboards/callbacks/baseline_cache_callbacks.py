@@ -57,6 +57,11 @@ def _compute_hourly_stats(asset_id, end_date):
     State("baseline-store", "data"),
 )
 def update_baseline_cache(asset_id, end_date, store_data):
+    """
+    Cache hourly seasonal stats (mean/std per hour-of-day x weekend flag) for each asset.
+    Keyed by (asset_id, end_date) tuple; used by historian_trends_callbacks to apply 3sima control limits.
+    Rolling 180-day lookback window, failures excluded (only healthy operation baseline).
+    """
     if _engine is None or not asset_id or not end_date:
         return store_data
 

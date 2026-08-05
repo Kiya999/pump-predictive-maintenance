@@ -1,60 +1,48 @@
 # environmental_panel.py
 from dash import html, dcc
+from layout.panel_styles import PANEL_STYLE, PANEL_TITLE_STYLE
 
 def create_environmental_panel():
     return html.Div([
-        html.H2("Environmental Context", style={"marginTop": 20}),
-
+        html.H2("Environmental Context", style=PANEL_TITLE_STYLE),
         html.Div([
             html.Div([
-                html.Span("Correlation (Overlap):", style={"fontWeight": "bold"}),
+                html.Span("Correlation:", style={"fontWeight": "bold", "fontSize": "12px"}),
                 html.Span(
                     id="env-correlation-stat",
                     children="--",
                     style={
-                        "fontSize": 24,
+                        "fontSize": "16px",
                         "fontWeight": "bold",
                         "color": "#2c3e50",
-                        "marginLeft": 15,
-                        "fontFamily": "monospace"
+                        "marginLeft": "8px",
                     }
                 ),
             ], style={"display": "flex", "alignItems": "center"}),
-
             html.Div(
                 id="env-overlap-message",
                 children="",
-                style={"fontSize": 12, "color": "#7f8c8d", "marginTop": 8}
+                style={"fontSize": "11px", "color": "#7f8c8d", "marginTop": "4px"}
             ),
         ], style={
-            "padding": 15,
+            "padding": "8px",
             "backgroundColor": "#ecf0f1",
-            "borderRadius": 5,
-            "marginBottom": 15,
+            "borderRadius": "4px",
+            "marginBottom": "8px",
             "border": "1px solid #bdc3c7"
         }),
-
-        dcc.Graph(id="env-overlay-chart", style={"height": "450px"}),
-
+        dcc.Graph(id="env-overlay-chart", style={"flex": 1, "minWidth": 0}),
         html.Div(
             id="env-data-alert",
             children="",
             style={
-                "padding": 12,
-                "marginTop": 15,
+                "padding": "6px",
+                "marginTop": "6px",
                 "backgroundColor": "#fdeef4",
                 "color": "#c0392b",
-                "borderRadius": 5,
+                "borderRadius": "4px",
                 "display": "none",
-                "fontSize": 13
+                "fontSize": "11px"
             }
         ),
-
-    ], style={
-        "flex": 1,
-        "minWidth": 0,
-        "padding": "20px",
-        "backgroundColor": "#ffffff",
-        "borderRadius": "8px",
-        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
-    })
+    ], style=PANEL_STYLE)

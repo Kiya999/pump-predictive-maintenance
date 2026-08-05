@@ -5,6 +5,8 @@ from dash import callback, Input, Output
 import pandas as pd
 import plotly.graph_objects as go
 
+from lib.unit_conversion import convert_value, unit_label
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
 sys.path.insert(0, os.path.join(project_root, 'scripts', 'analytics-pipeline'))
 
@@ -24,7 +26,6 @@ def set_engine(engine):
     Output("env-overlap-message", "children"),
     Output("env-data-alert", "children"),
     Output("env-data-alert", "style"),
-
     Input("asset-selector", "value"),
     Input("date-range-picker", "start_date"),
     Input("date-range-picker", "end_date"),
@@ -64,6 +65,10 @@ def update_environmental_chart(asset_id, start_date, end_date, subsample_on):
         """
         env_df_raw = pd.read_sql(query_env, _engine, parse_dates=["timestamp"])
 
+        hist_df_raw["flow_converted"] = hist_df_raw["flow_m3h"].apply(
+            lambda x: convert_value(x, "flow_m3h")
+        )
+
         overlap_info = compute_overlap_correlation(
             hist_df_raw, env_df_raw,
             hist_col="flow_m3h",
@@ -76,8 +81,8 @@ def update_environmental_chart(asset_id, start_date, end_date, subsample_on):
             hist_df = hist_df_raw.set_index("timestamp").resample("30min").mean().reset_index()
             env_df = env_df_raw.set_index("timestamp").resample("30min").mean().reset_index()
         else:
-            hist_df = hist_df_raw
-            env_df = env_df_raw
+            hist_df = hist_df_raw.copy()
+            env_df = env_df_raw.copy()
 
         corr_str = overlap_info["correlation_str"]
         message = overlap_info["message"]
@@ -86,9 +91,9 @@ def update_environmental_chart(asset_id, start_date, end_date, subsample_on):
 
         fig.add_trace(go.Scatter(
             x=hist_df["timestamp"],
-            y=hist_df["flow_m3h"],
+            y=hist_df["flow_converted"],
             mode="lines",
-            name="Flow (m3/h)",
+            name=f"Flow ({unit_label('flow_m3h')})",
             line=dict(color="#3498db", width=2),
             yaxis="y1",
         ))
@@ -117,8 +122,13 @@ def update_environmental_chart(asset_id, start_date, end_date, subsample_on):
         fig.update_layout(
             title=f"Environmental Context - {asset_id} {subsample_label}",
             xaxis_title="Timestamp",
-            yaxis_title="Flow (m3/h)",
-            yaxis=dict(title=dict(text="Flow (m3/h)", font=dict(color="#3498db")), tickfont=dict(color="#3498db"),
+            yaxis_title=f"Flow ({unit_label('flow_m3h')})",
+            yaxis=dict(
+                title=dict(
+                    text=f"Flow ({unit_label('flow_m3h')})",
+                    font=dict(color="#3498db")
+                ),
+                tickfont=dict(color="#3498db"),
             ),
             template="plotly_white",
             hovermode="x unified",

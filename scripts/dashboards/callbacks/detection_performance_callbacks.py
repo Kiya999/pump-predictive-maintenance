@@ -9,6 +9,10 @@ sys.path.insert(0, os.path.join(project_root, 'scripts', 'analytics-pipeline'))
 
 from analytics_config import DETECTION_PERFORMANCE_DIR, ANALYSIS_OUTPUT_FILES
 
+ASSET_SCENARIO_MAP = {
+    "P-0100": "bearing",
+    "P-0500": "insulation",
+}
 
 def _load_csv(filename):
     path = os.path.join(DETECTION_PERFORMANCE_DIR, filename)
@@ -31,11 +35,12 @@ def _build_lead_time_table():
     hours_df = _load_csv(ANALYSIS_OUTPUT_FILES["lead_times"])
     pct_df = _load_csv(ANALYSIS_OUTPUT_FILES["lead_times_percent_pf"])
     if hours_df is None or pct_df is None:
-        return html.Div(
-            "lead_times.csv / lead_times_percent_pf.csv not found — "
+        error_div = html.Div(
+            "lead_times.csv / lead_times_percent_pf.csv not found - "
             "run analyze_detection_performance.py first.",
             style={"color": "#e74c3c"}
         )
+        return error_div, None, None
 
     hours_df = hours_df.set_index(hours_df.columns[0])
     pct_df = pct_df.set_index(pct_df.columns[0])
@@ -49,12 +54,21 @@ def _build_lead_time_table():
             rows.append({
                 "Scenario": scenario,
                 "Method": method,
-                "Lead time (hours)": f"{hrs:.1f}" if pd.notna(hrs) else "—",
-                "% of P-F interval": f"{pct:.1f}%" if pd.notna(pct) else "—",
+                "Lead time (hours)": f"{hrs:.1f}" if pd.notna(hrs) else "-",
+                "% of P-F interval": f"{pct:.1f}%" if pd.notna(pct) else "-",
                 "Status": status,
             })
 
-    return dash_table.DataTable(
+    for method in ["Z-score", "IQR", "Moving avg"]:
+        rows.append({
+            "Scenario": "cavitation",
+            "Method": method,
+            "Lead time (hours)": "-",
+            "% of P-F interval": "-",
+            "Status": "NO",
+        })
+
+    table = dash_table.DataTable(
         data=rows,
         columns=[{"name": c, "id": c} for c in ["Scenario", "Method", "Lead time (hours)", "% of P-F interval", "Status"]],
         style_cell={"fontSize": 12, "padding": "6px"},
@@ -63,7 +77,8 @@ def _build_lead_time_table():
             {"if": {"filter_query": '{Status} = "SUSPECT"'}, "backgroundColor": "#fdedec"},
             {"if": {"filter_query": '{Status} = "NO"'}, "backgroundColor": "#f4f6f6"},
         ],
-    ), hours_df, pct_df
+    )
+    return table, hours_df, pct_df
 
 
 def _build_fp_table():
@@ -90,19 +105,23 @@ def _build_fp_table():
     Output("lead-time-table", "children"),
     Output("fp-rate-table", "children"),
     Output("trend-detection-summary", "children"),
+    Output("detection-performance-method-note", "children"),
     Input("date-range-picker", "start_date"),  # trigger on load; these CSVs aren't date-filtered
+    Input("asset-selector", "value"),
 )
-def update_detection_performance(_start_date):
+def update_detection_performance(_start_date, selected_asset):
+    """
+    Load pre-computed detection performance (lead times, false positive rates).
+    Aggregated across ALL ASSETS AND TIME - this is offline validation against synthetic failure scenarios.
+    Current FP aggregation by Signal only; future enhancement: reactive per-asset FP breakdown on asset-selector change.
+    """
+    lead_table, hours_df, pct_df = _build_lead_time_table()
 
-    lead_table_result = _build_lead_time_table()
-    if isinstance(lead_table_result, tuple):
-        lead_table, hours_df, pct_df = lead_table_result
+    best_pct = None
+    if hours_df is not None and pct_df is not None:
         valid_pct = pct_df.replace([float("inf"), float("-inf")], None).stack().dropna()
         valid_pct = valid_pct[valid_pct <= 100.0]
         best_pct = valid_pct.min() if len(valid_pct) else None
-    else:
-        lead_table = lead_table_result
-        best_pct = None
 
     fp_table = _build_fp_table()
 
@@ -117,7 +136,7 @@ def update_detection_performance(_start_date):
             sig = "SIGNIFICANT" if row[sig_col] else "not significant"
             lines.append(html.Div(
                 f"{row['Window type']} ({row['Window hours']:.0f}h): "
-                f"trend={row['Trend direction']}, p={row['P-value']:.6f} — {sig}"
+                f"trend={row['Trend direction']}, p={row['P-value']:.6f} - {sig}"
             ))
         trend_summary = html.Div(lines)
         avg_fp = None
@@ -149,4 +168,5 @@ def update_detection_performance(_start_date):
         _kpi_card("Methods compared", "3 (Z-score, IQR, Moving avg)"),
     ]
 
-    return kpis, lead_table, fp_table, trend_summary
+    note_text = "Showing offline validation results across all assets (fleet-wide, not asset-filtered)."
+    return kpis, lead_table, fp_table, trend_summary, note_text

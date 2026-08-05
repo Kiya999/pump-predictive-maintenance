@@ -20,55 +20,54 @@ ASSET_OPTIONS = get_asset_options()
 def create_header():
     return html.Div([
         html.Div([
-            html.H1("Pump and Motor Monitoring Dashboard",
-                    style={"textAlign": "center", "marginTop": 0, "marginBottom": 5}),
-            html.P("10 assets, 365 days, 1-minute resolution",
-                   style={"textAlign": "center", "color": "#7f8c8d", "marginBottom": 15}),
-
-            html.Hr(style={"borderColor": "#bdc3c7"}),
-
-            dcc.Dropdown(
-                id="asset-selector",
-                options=ASSET_OPTIONS,
-                value=ASSET_OPTIONS[0]["value"] if ASSET_OPTIONS else None,
-                clearable=False,
-                style={"display": "none"}
-            ),
-
             html.Div([
-
+                # Logo
+                html.Img(
+                    src="/assets/logo.png",
+                    style={
+                        "height": "70px",
+                        "marginRight": "20px",
+                        "verticalAlign": "middle",
+                    }
+                ),
                 html.Div([
-                    html.Label("Date Range:", style={"fontWeight": "bold"}),
-                    dcc.DatePickerRange(
-                        id="date-range-picker",
-                        start_date=DEFAULT_START_DATE,
-                        end_date=DEFAULT_END_DATE,
-                        display_format="YYYY-MM-DD"
-                    ),                    
-                ], style={"flex": 1, "marginRight": 20}),
-
-                html.Div([
-                    dcc.Checklist(
-                        id="subsample-toggle",
-                        options=[{"label": " Subsample data", "value": "on"}],
-                        value=["on"],
-                        style={"display": "inline-block"}
+                    html.H1(
+                        "Pump and Motor Monitoring Dashboard",
+                        style={
+                            "margin": "0 0 4px 0",
+                            "fontSize": "26px",
+                            "fontWeight": "bold",
+                            "color": "#ffffff",
+                            "lineHeight": "1.1",
+                        }
                     ),
-                ], style={"flex": 1, "marginRight": 0}),
-
+                    html.P(
+                        "10 assets, 365 days, 1-minute resolution",
+                        style={
+                            "margin": "0",
+                            "fontSize": "12px",
+                            "color": "#ecf0f1",
+                            "lineHeight": "1",
+                        }
+                    ),
+                ], style={"display": "inline-block", "verticalAlign": "middle"}),
             ], style={
                 "display": "flex",
-                "gap": 10,
-                "padding": "15px",
-                "backgroundColor": "#ffffff",
-                "borderRadius": "8px",
-                "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
+                "alignItems": "center",
+                "padding": "12px 15px",
             }),
-
         ], style={
-            "maxWidth": MAX_WIDTH,
-            "margin": "0 auto",
-            "padding": "15px",
+            "backgroundColor": "#2c3e50",
+            "borderBottom": "2px solid #34495e",
         }),
 
-    ], style={"backgroundColor": BG_COLOR})
+        # Hidden asset selector
+        dcc.Dropdown(
+            id="asset-selector",
+            options=ASSET_OPTIONS,
+            value=ASSET_OPTIONS[0]["value"] if ASSET_OPTIONS else None,
+            clearable=False,
+            style={"display": "none"}
+        ),
+
+    ], style={"margin": 0, "padding": 0})
