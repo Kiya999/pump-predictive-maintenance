@@ -158,10 +158,12 @@ try:
     result = compute_overlap_correlation(
         hist_sample, env_sample,
         hist_col="flow_m3h",
-        env_col="discharge_cfs"
+        env_col="discharge_cfs",
+        hist_ts_col="timestamp",
+        env_ts_col="timestamp",
     )
 
-    ok = result["data_available"] or result["overlap_count"] >= 0
+    ok = result["data_available"]
     check("Correlation module", ok, f"Overlap: {result['overlap_count']}, Correlation: {result['correlation_str']}")
 except Exception as e:
     check("Correlation module", False, str(e))
