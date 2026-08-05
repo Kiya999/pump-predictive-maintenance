@@ -350,6 +350,9 @@ class SyntheticHistorian:
         }
         df = pd.DataFrame(data)
 
+        # All rows from failure onset onwards are marked with the failure scenario name.
+        # This denotes the degraded operational regime, not the exact instantaneous failure point.
+        # True failure occurs at ramp_end = start_day + ramp_days (handled by analyze_detection_performance.py).
         df["failure_type"] = "none"
         for scenario in self.config.failure_scenarios:
             if scenario["asset_id"] == asset["asset_id"]:
