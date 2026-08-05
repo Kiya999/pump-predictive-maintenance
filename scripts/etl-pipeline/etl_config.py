@@ -35,6 +35,9 @@ CONFIG = {
     },
 
     "unit_conversions": {
+    # NOTE: P-0700 has intentional unit mismatch (kPa instead of bar) for testing ETL's
+    # unit conversion capability. This is synthetic test data, not a real sensor issue.
+    # Test validates that ETL correctly converts P-0700 pressure columns by 0.01 factor.
         "P-0700": {
             "suction_pressure_bar": {"from_unit": "kPa", "to_unit": "bar", "factor": 0.01},
             "disch_pressure_bar": {"from_unit": "kPa", "to_unit": "bar", "factor": 0.01},

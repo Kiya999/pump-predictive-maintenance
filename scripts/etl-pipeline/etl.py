@@ -57,6 +57,16 @@ def normalize_timestamps(df, col_name, source_tz, target_tz="UTC"):
 
     df = df.copy()
 
+    nat_mask = df[col_name].isna()
+    if nat_mask.any():
+        nat_count = nat_mask.sum()
+        logger.error(f"Column {col_name}: {nat_count} NaT (unparseable) values found")
+        logger.error(f"  Example indices: {nat_mask.index[nat_mask][:5].tolist()}")
+        if nat_count > 0.05 * len(df):  # If >5% of timestamps are NaT
+            raise ValueError(f"Too many NaT values in {col_name}: {nat_count}/{len(df)}")
+        else:
+            logger.warning(f"  Proceeding; these rows will be flagged with quality_flag='missing'")
+
     if df[col_name].dt.tz is None:
         df[col_name] = df[col_name].dt.tz_localize(source_tz)
         logger.info(f"Localized {col_name} to {source_tz}")
@@ -157,19 +167,35 @@ def add_quality_flags(df, quality_report_path):
     with open(quality_report_path) as f:
         report = json.load(f)
 
-    for col, col_info in report.get("completeness", {}).get("per_column", {}).items():
-        if col in OPTIONAL_COLUMNS:
-            logger.debug(f"Skipping quality check for optional column: {col}")
-            continue
+    expected_keys = {"completeness", "outliers"}
+    actual_keys = set(report.keys())
+    if not actual_keys.issuperset({"completeness"}):
+        logger.warning(f"Quality report missing expected keys. Expected {expected_keys}, got {actual_keys}")
+        logger.warning("  Quality flagging will be incomplete.")
 
-        if col_info.get("missing_count", 0) > 0 and col in df.columns:
-            df.loc[df[col].isna(), "quality_flag"] = "missing"
-            logger.info(f"Flagged {df['quality_flag'].eq('missing').sum()} rows as missing in {col}")
+    # Process completeness
+    completeness_data = report.get("completeness", {})
+    if "per_column" not in completeness_data:
+        logger.warning("Quality report: 'completeness.per_column' key missing. Skipping missing-value flagging.")
+    else:
+        for col, col_info in completeness_data["per_column"].items():
+            if col in OPTIONAL_COLUMNS:
+                logger.debug(f"Skipping quality check for optional column: {col}")
+                continue
+
+            if col_info.get("missing_count", 0) > 0 and col in df.columns:
+                df.loc[df[col].isna(), "quality_flag"] = "missing"
+                logger.info(f"Flagged {df['quality_flag'].eq('missing').sum()} rows as missing in {col}")
+
+    # Process outliers
+    outliers_data = report.get("outliers", {})
+    if not outliers_data:
+        logger.debug("Quality report: no outlier data found.")
 
     for col in df.select_dtypes(include=[np.number]).columns:
         if col == "quality_flag":
             continue
-        if col not in report.get("outliers", {}):
+        if col not in outliers_data:
             continue
 
         col_outlier_info = report["outliers"][col]
